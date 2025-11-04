@@ -10,14 +10,20 @@ const api = axios.create({
 });
 
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and tenant_id
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    console.log(token);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Agregar tenant_id desde localStorage (puede ser el seleccionado o el del usuario)
+    const selectedTenantId = localStorage.getItem('selectedTenantId');
+    if (selectedTenantId) {
+      config.headers['X-Tenant-ID'] = selectedTenantId;
+    }
+    
     return config;
   },
   (error) => {
@@ -30,7 +36,9 @@ api.interceptors.response.use(
   (response) => response,
   
   (error) => {
-    if (error.response?.status === 401) {
+    // Solo redirigir a login si ya estamos autenticados y recibimos 401
+    // No redirigir si estamos en la página de login (para mostrar el error)
+    if (error.response?.status === 401 && window.location.pathname !== '/login') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
@@ -61,14 +69,14 @@ export const tenantAPI = {
 export const serviceAPI = {
   getAll: () => api.get('/api/services'),
   search: (query: string) => api.get(`/api/services/search?q=${query}`),
-  getById: (id: string) => api.get(`/api/services/getId?id=${id}`),
+  getById: (id: number) => api.get(`/api/services/getId?id=${id}`),
   getCount: () => api.get('/api/services/count'),
   getByCode: (code: string) => api.get(`/api/services/codigo?codigo=${code}`),
   getActive: () => api.get('/api/services/active'),
   create: (data: any) => api.post('/api/services/create', data),
   update: (data: any) => api.put('/api/services/update', data),
-  delete: (data: any) => api.delete('/api/services/deleteService', { data }),
-  deletePermanent: (data: any) => api.delete('/api/services/servicePermanent', { data }),
+  delete: (serviceId: number) => api.delete('/api/services/deleteService', { data: serviceId }),
+  deletePermanent: (id: number) => api.delete('/api/services/servicePermanent', { data: id }),
 };
 
 // Product API
@@ -83,11 +91,36 @@ export const productAPI = {
   getLowStockCount: () => api.get('/api/products/count/lowStock'),
   getByCode: (code: string) => api.get(`/api/products/codigo?codigo=${code}`),
   getActive: () => api.get('/api/products/active'),
+  getVaccines: () => api.get('/api/products/vaccines'),
+  getAvailableVaccines: () => api.get('/api/products/vaccines/available'),
+  getVaccinesCount: () => api.get('/api/products/count/vaccines'),
   create: (data: any) => api.post('/api/products/create', data),
   update: (data: any) => api.put('/api/products/update', data),
   updateStock: (data: any) => api.put('/api/products/updateStock', data),
   delete: (data: any) => api.delete('/api/products/deleteProduct', { data }),
   deletePermanent: (data: any) => api.delete('/api/products/productPermanent', { data }),
+};
+
+// Roles API
+export const rolesAPI = {
+  getAll: () => api.get('/api/roles'),
+  getActive: () => api.get('/api/roles/active'),
+  getById: (rolId: string) => api.post('/api/roles/getById', { rolId }),
+};
+
+// Client API (Nuevo)
+export const clientAPI = {
+  getAll: () => api.get('/api/clients'),
+  getActive: () => api.get('/api/clients/active'),
+  getById: (id: number) => api.post('/api/clients/getById', { id }),
+  searchByName: (name: string) => api.post('/api/clients/searchByName', { name }),
+  getByIdent: (ident: string) => api.post('/api/clients/getByIdent', { ident }),
+  getByCorreo: (correo: string) => api.post('/api/clients/getByCorreo', { correo }),
+  count: () => api.get('/api/clients/count'),
+  create: (data: any) => api.post('/api/clients/create', data),
+  update: (data: any) => api.put('/api/clients/update', data),
+  delete: (id: number) => api.delete('/api/clients/delete', { data: { id } }),
+  deletePermanent: (id: number) => api.delete('/api/clients/deletePermanent', { data: { id } }),
 };
 
 // User API
@@ -97,8 +130,8 @@ export const userAPI = {
     tenantId: tenantId.toString() 
   }),
   search: (query: string) => api.get(`/api/users/search?q=${query}`),
-  getByRole: (roleId: string) => api.get(`/api/users/rolId?rolId=${roleId}`),
-  getById: (id: string) => api.get(`/api/users/getId?id=${id}`),
+  getByRole: (roleId: string) => api.post('/api/users/rolId', { rolId: roleId }),
+  getById: (id: string) => api.post('/api/users/getId', { id: parseInt(id) }),
   getCount: () => api.get('/api/users/count'),
   getActiveCount: () => api.get('/api/users/count/active'),
   getActive: () => api.get('/api/users/active'),
@@ -114,21 +147,37 @@ export const userAPI = {
 // Appointment API
 export const appointmentAPI = {
   getAll: () => api.get('/api/appointments'),
-  getByUser: (userId: string) => api.get(`/api/appointments/user?userId=${userId}`),
+  getByClient: (clientId: number) => api.get(`/api/appointments/client?clientId=${clientId}`),
   getToday: () => api.get('/api/appointments/today'),
-  getByPet: (petId: string) => api.get(`/api/appointments/pet?petId=${petId}`),
-  getById: (id: string) => api.get(`/api/appointments/getId?id=${id}`),
+  getByPet: (petId: number) => api.get(`/api/appointments/pet?petId=${petId}`),
+  getById: (id: number) => api.post('/api/appointments/getId', id),
   getByStatus: (status: string) => api.get(`/api/appointments/estado?estado=${status}`),
-  getByDateRange: (startDate: string, endDate: string) => 
-    api.get(`/api/appointments/dateRange?startDate=${startDate}&endDate=${endDate}`),
+  getByDateRange: (inicio: string, fin: string) => 
+    api.get(`/api/appointments/dateRange?inicio=${inicio}&fin=${fin}`),
   getTodayCount: () => api.get('/api/appointments/count/today'),
   getActive: () => api.get('/api/appointments/active'),
   create: (data: any) => api.post('/api/appointments/create', data),
   update: (data: any) => api.put('/api/appointments/update', data),
-  complete: (data: any) => api.put('/api/appointments/complete', data),
-  cancel: (data: any) => api.put('/api/appointments/cancel', data),
-  delete: (data: any) => api.delete('/api/appointments/deleteAppointment', { data }),
+  complete: (appointmentId: number, diagnostico: string) => 
+    api.put(`/api/appointments/complete?appointmentId=${appointmentId}&diagnostico=${encodeURIComponent(diagnostico)}`),
+  cancel: (appointmentId: number) => api.put(`/api/appointments/cancel?appointmentId=${appointmentId}`),
+  markAsInvoiced: (appointmentId: number) => api.put(`/api/appointments/markAsInvoiced?appointmentId=${appointmentId}`),
+  delete: (appointmentId: number) => api.delete('/api/appointments/deleteAppointment', { data: appointmentId }),
   deletePermanent: (data: any) => api.delete('/api/appointments/appointmentPermanent', { data }),
+  getByVeterinarianAndDate: (veterinarianId: number, fecha: string) =>
+    api.get(`/api/appointments/veterinarian?veterinarianId=${veterinarianId}&fecha=${fecha}`),
+  getAvailableSlots: (veterinarianId: number, fecha: string, horaInicio?: string, horaFin?: string, intervaloMinutos?: number) => {
+    const params = new URLSearchParams({
+      veterinarianId: veterinarianId.toString(),
+      fecha: fecha,
+      ...(horaInicio && { horaInicio }),
+      ...(horaFin && { horaFin }),
+      ...(intervaloMinutos && { intervaloMinutos: intervaloMinutos.toString() })
+    });
+    return api.get(`/api/appointments/availableSlots?${params.toString()}`);
+  },
+  // Nuevo endpoint para carrito de compras
+  getForInvoice: (appointmentId: number) => api.post('/api/appointments/forInvoice', { id: appointmentId }),
 };
 
 // Pet API
@@ -137,36 +186,84 @@ export const petAPI = {
   getByType: (type: string) => api.get(`/api/pets/type?type=${type}`),
   search: (query: string) => api.get(`/api/pets/search?q=${query}`),
   getByOwner: (ownerId: string) => api.get(`/api/pets/owner?ownerId=${ownerId}`),
-  getById: (id: string) => api.get(`/api/pets/getId?id=${id}`),
+  getById: (id: string) => api.post('/api/pets/getId', { id: parseInt(id) }),
+  getOwners: (petId: number) => api.post('/api/pets/getOwners', { id: petId }),
   getCount: () => api.get('/api/pets/count'),
   getActive: () => api.get('/api/pets/active'),
   create: (data: any) => api.post('/api/pets/create', data),
   update: (data: any) => api.put('/api/pets/update', data),
-  addOwner: (data: any) => api.post('/api/pets/addOwner', data),
-  removeOwner: (data: any) => api.delete('/api/pets/removeOwner', { data }),
+  addOwner: (petId: number, ownerId: number) => api.post(`/api/pets/addOwner?petId=${petId}&ownerId=${ownerId}`),
+  removeOwner: (petId: number, ownerId: number) => api.delete(`/api/pets/removeOwner?petId=${petId}&ownerId=${ownerId}`),
   delete: (data: any) => api.delete('/api/pets/deletePet', { data }),
   deletePermanent: (data: any) => api.delete('/api/pets/petPermanent', { data }),
 };
 
 // Invoice API
 export const invoiceAPI = {
+  // GET endpoints
   getAll: () => api.get('/api/invoices'),
-  getTopServices: () => api.get('/api/invoices/topServices'),
-  getTopProducts: () => api.get('/api/invoices/topProducts'),
-  getTodaySales: () => api.get('/api/invoices/sales/today'),
-  getMonthSales: () => api.get('/api/invoices/sales/month'),
-  getByNumber: (numero: string) => api.get(`/api/invoices/numero?numero=${numero}`),
-  getById: (id: string) => api.get(`/api/invoices/getId?id=${id}`),
-  getByStatus: (status: string) => api.get(`/api/invoices/estado?estado=${status}`),
-  getByDateRange: (startDate: string, endDate: string) => 
-    api.get(`/api/invoices/dateRange?startDate=${startDate}&endDate=${endDate}`),
-  getTodayCount: () => api.get('/api/invoices/count/today'),
-  getByClient: (clientId: string) => api.get(`/api/invoices/client?clientId=${clientId}`),
   getActive: () => api.get('/api/invoices/active'),
+  getById: (id: number) => api.post('/api/invoices/getId', id),
+  getByNumero: (numero: string) => api.get(`/api/invoices/numero?numero=${numero}`),
+  getByClient: (clientId: number) => api.get(`/api/invoices/client?clientId=${clientId}`),
+  getByEstado: (estado: string) => api.get(`/api/invoices/estado?estado=${estado}`),
+  getByDateRange: (inicio: string, fin: string) => 
+    api.get(`/api/invoices/dateRange?inicio=${inicio}&fin=${fin}`),
+  
+  // Sales statistics
+  getTotalSalesToday: () => api.get('/api/invoices/sales/today'),
+  getTotalSalesMonth: () => api.get('/api/invoices/sales/month'),
+  getTopProducts: () => api.get('/api/invoices/topProducts'),
+  getTopServices: () => api.get('/api/invoices/topServices'),
+  
+  // Counters
+  countInvoicesToday: () => api.get('/api/invoices/count/today'),
+  
+  // POST/PUT endpoints
   create: (data: any) => api.post('/api/invoices/create', data),
-  updateStatus: (data: any) => api.put('/api/invoices/updateStatus', data),
-  cancel: (data: any) => api.put('/api/invoices/cancel', data),
-  delete: (data: any) => api.delete('/api/invoices/deleteInvoice', { data }),
+  updateStatus: (invoiceId: number, estado: string) => 
+    api.put(`/api/invoices/updateStatus?invoiceId=${invoiceId}&estado=${estado}`),
+  cancel: (invoiceId: number) => api.put(`/api/invoices/cancel?invoiceId=${invoiceId}`),
+  
+  // DELETE endpoints
+  delete: (invoiceId: number) => api.delete('/api/invoices/deleteInvoice', { data: invoiceId }),
+};
+
+// Medical History API
+export const medicalHistoryAPI = {
+  getAll: () => api.get('/api/medical-history'),
+  getById: (id: number) => api.post('/api/medical-history/getId', { id }),
+  getByPet: (petId: number) => api.post('/api/medical-history/getByPet', { id: petId }),
+  getByAppointment: (appointmentId: number) => api.post('/api/medical-history/getByAppointment', { id: appointmentId }),
+  getByVeterinarian: (veterinarianId: number) => api.post('/api/medical-history/getByVeterinarian', { id: veterinarianId }),
+  getByService: (serviceId: number) => api.post('/api/medical-history/getByService', { id: serviceId }),
+  getByProcedureType: (petId: number, tipoProcedimiento: string) => 
+    api.post('/api/medical-history/getByProcedureType', { petId, tipoProcedimiento }),
+  getByDateRange: (petId: number, fechaInicio: string, fechaFin: string) => 
+    api.post(`/api/medical-history/getByDateRange?petId=${petId}&fechaInicio=${fechaInicio}&fechaFin=${fechaFin}`),
+  create: (data: any) => api.post('/api/medical-history/create', data),
+  update: (data: any) => api.put('/api/medical-history/update', data),
+  delete: (id: number) => api.delete('/api/medical-history/deleteHistory', { data: { id } }),
+  deletePermanent: (id: number) => api.delete('/api/medical-history/deletePermanent', { data: { id } }),
+};
+
+// Vaccination API
+export const vaccinationAPI = {
+  getAll: () => api.get('/api/vaccinations'),
+  getById: (id: number) => api.post('/api/vaccinations/getId', { id }),
+  getByPet: (petId: number) => api.post('/api/vaccinations/getByPet', { id: petId }),
+  getByMedicalHistory: (medicalHistoryId: number) => api.post('/api/vaccinations/getByMedicalHistory', { id: medicalHistoryId }),
+  getByVeterinarian: (veterinarianId: number) => api.post('/api/vaccinations/getByVeterinarian', { id: veterinarianId }),
+  getByVaccineName: (petId: number, vaccineName: string) => api.post('/api/vaccinations/getByVaccineName', { petId, vaccineName }),
+  getPending: (petId: number) => api.post('/api/vaccinations/pending', { id: petId }),
+  getCompleted: (petId: number) => api.post('/api/vaccinations/getCompleted', { id: petId }),
+  create: (data: any) => api.post('/api/vaccinations/create', data),
+  update: (data: any) => api.put('/api/vaccinations/update', data),
+  markAsInvoiced: (vaccinationId: number) => api.put(`/api/vaccinations/markAsInvoiced?vaccinationId=${vaccinationId}`),
+  delete: (id: number) => api.delete('/api/vaccinations/deleteVaccination', { data: { id } }),
+  deletePermanent: (id: number) => api.delete('/api/vaccinations/deletePermanent', { data: { id } }),
+  // Nuevo endpoint para carrito de compras
+  getForInvoice: (vaccinationId: number) => api.post('/api/vaccinations/forInvoice', { id: vaccinationId }),
 };
 
 // Dashboard API
@@ -183,6 +280,74 @@ export const dashboardAPI = {
   getTodayAppointments: () => api.get('/api/dashboard/appointments/today'),
   getAppointmentStats: () => api.get('/api/dashboard/appointments/stats'),
   getAlerts: () => api.get('/api/dashboard/alerts'),
+};
+
+// Métricas API - Nuevos endpoints optimizados
+export const metricasAPI = {
+  getCitasHoy: () => api.get('/api/metricas/citas-hoy'),
+  getCantidadProductos: () => api.get('/api/metricas/cantidad-productos'),
+  getVentasDia: () => api.get('/api/metricas/ventas-dia'),
+  getVentasMes: () => api.get('/api/metricas/ventas-mes'),
+  getProductosProximosVencer: () => api.get('/api/metricas/productos-proximos-vencer'),
+  getAlertaBajoInventario: () => api.get('/api/metricas/alerta-bajo-inventario'),
+  getComparativaVentas: () => api.get('/api/metricas/comparativa-ventas'),
+  getDashboard: () => api.get('/api/metricas/dashboard'), // Todas las métricas en una sola llamada
+};
+
+// IA Chatbot API (Python FastAPI - Puerto 8000)
+const IA_API_BASE_URL = 'http://localhost:8000';
+
+const iaApi = axios.create({
+  baseURL: IA_API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const chatbotAPI = {
+  // Chatbot
+  sendMessage: (mensaje: string, usuario_id: string = 'user123') => 
+    iaApi.post('/api/chat', { mensaje, usuario_id }),
+  getComandos: () => iaApi.get('/api/chat/comandos'),
+  
+  // Estadísticas
+  getEstadisticas: () => iaApi.get('/api/estadisticas'),
+  
+  // Análisis
+  getTiposMascota: () => iaApi.get('/api/analisis/tipos-mascota'),
+  getDiasAtencion: () => iaApi.get('/api/analisis/dias-atencion'),
+  getHorasPico: () => iaApi.get('/api/analisis/horas-pico'),
+  getServicios: () => iaApi.get('/api/analisis/servicios'),
+  
+  // Clustering
+  getClusteringCompleto: () => iaApi.get('/api/clustering/completo'),
+  getClusteringMascotas: () => iaApi.get('/api/clustering/mascotas'),
+  getClusteringClientes: () => iaApi.get('/api/clustering/clientes'),
+  getClusteringServicios: () => iaApi.get('/api/clustering/servicios'),
+  
+  // Predicciones
+  predecirTipoMascota: (data: { dia_semana: number; hora: number; mes: number; service_id: number }) =>
+    iaApi.post('/api/predicciones/tipo-mascota', data),
+  predecirAsistencia: (data: any) => iaApi.post('/api/predicciones/asistencia', data),
+  getTipoMasComun: () => iaApi.get('/api/predicciones/tipo-mas-comun'),
+  getDiaMasAtencion: () => iaApi.get('/api/predicciones/dia-mas-atencion'),
+  getEstadoModelos: () => iaApi.get('/api/predicciones/estado'),
+  
+  // Consultas
+  buscarMascota: (nombre: string) => iaApi.get(`/api/mascotas/buscar/${nombre}`),
+  getHistorialMascota: (pet_id: number) => iaApi.get(`/api/mascotas/${pet_id}/historial`),
+  getCitasMascota: (pet_id: number) => iaApi.get(`/api/mascotas/${pet_id}/citas`),
+  getVacunasMascota: (pet_id: number) => iaApi.get(`/api/mascotas/${pet_id}/vacunas`),
+  buscarCliente: (correo: string) => iaApi.get(`/api/clientes/buscar/${correo}`),
+  getMascotasCliente: (client_id: number) => iaApi.get(`/api/clientes/${client_id}/mascotas`),
+  getServiciosDisponibles: () => iaApi.get('/api/servicios'),
+  
+  // Administración
+  entrenarModelos: () => iaApi.post('/api/entrenar'),
+  exportarDataset: () => iaApi.get('/api/exportar/dataset'),
+  
+  // Health check
+  healthCheck: () => iaApi.get('/api/health'),
 };
 
 export default api;

@@ -10,27 +10,46 @@ import {
   DollarSign,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Syringe
 } from 'lucide-react';
 import { productAPI } from '../services/api';
 import type { Product } from '../types/types';
+import { usePagination } from '../hooks/usePagination';
+import Pagination from '../components/Pagination';
 
 const Products: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState<string>('all'); // 'all', 'vaccines', 'products'
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
+    codigo: '',
     nombre: '',
     descripcion: '',
-    precioVenta: 0,
+    presentacion: '',
+    precio: 0,
     stock: 0,
     stockMinimo: 0,
     fechaVencimiento: '',
     lote: '',
+    fabricante: '',
+    esVacuna: false,
     activo: true
+  });
+
+  // Hook de paginación
+  const {
+    currentPage,
+    totalPages,
+    paginatedData,
+    goToPage
+  } = usePagination({
+    data: filteredProducts,
+    itemsPerPage: 10
   });
 
   useEffect(() => {
@@ -39,7 +58,7 @@ const Products: React.FC = () => {
 
   useEffect(() => {
     filterProducts();
-  }, [products, searchTerm]);
+  }, [products, searchTerm, typeFilter]);
 
   const loadProducts = async () => {
     try {
@@ -47,28 +66,56 @@ const Products: React.FC = () => {
       const response = await productAPI.getAll();
       setProducts(response.data);
       setFilteredProducts(response.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading products:', error);
+      
+      // Manejar error 403 específicamente
+      if (error?.response?.status === 403) {
+        alert('Error de permisos (403): No tienes autorización para ver los productos.\n\n' +
+              'Posibles causas:\n' +
+              '1. Tu usuario no tiene los roles necesarios\n' +
+              '2. El endpoint /api/products en el backend no tiene la anotación @RequiresRole\n\n' +
+              'Solución: Verifica que el ProductController tenga las anotaciones @RequiresRole apropiadas.\n' +
+              'Ver archivo DEBUG_AUTH.md para más información.');
+      } else if (error?.response?.status === 401) {
+        alert('Error de autenticación (401): Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const filterProducts = () => {
-    const filtered = products.filter(product =>
-      product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.lote?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    let filtered = products;
+
+    // Filtrar por tipo de producto
+    if (typeFilter === 'vaccines') {
+      filtered = filtered.filter(product => product.esVacuna === true);
+    } else if (typeFilter === 'products') {
+      filtered = filtered.filter(product => !product.esVacuna);
+    }
+
+    // Filtrar por término de búsqueda
+    if (searchTerm) {
+      filtered = filtered.filter(product =>
+        product.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.descripcion.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.codigo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.presentacion?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
     setFilteredProducts(filtered);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
-              type === 'number' ? parseFloat(value) || 0 : value
+              (name === 'precio' ? (parseFloat(value) || 0) :
+               name === 'stock' || name === 'stockMinimo' ? (parseInt(value) || 0) :
+               type === 'number' ? parseFloat(value) || 0 : value)
     }));
   };
 
@@ -76,28 +123,78 @@ const Products: React.FC = () => {
     e.preventDefault();
     try {
       if (editingProduct) {
-        await productAPI.update({ ...formData, id: editingProduct.id });
+        // Preparar datos para actualización según Product model del backend
+        const updateData = {
+          productId: editingProduct.productId || parseInt(editingProduct.id || '0'),
+          codigo: formData.codigo,
+          nombre: formData.nombre,
+          descripcion: formData.descripcion,
+          presentacion: formData.presentacion || null,
+          precio: Number(formData.precio),
+          stock: formData.stock,
+          stockMinimo: formData.stockMinimo,
+          fechaVencimiento: formData.fechaVencimiento || null,
+          lote: formData.lote || null,
+          fabricante: formData.fabricante || null,
+          esVacuna: formData.esVacuna,
+          activo: formData.activo
+        };
+        await productAPI.update(updateData);
       } else {
-        await productAPI.create(formData);
+        // Preparar datos para creación según ProductCreateDto
+        // Validar que el código no esté vacío
+        if (!formData.codigo || formData.codigo.trim() === '') {
+          alert('El código es obligatorio');
+          return;
+        }
+        
+        // Validar que el precio sea mayor a 0
+        if (formData.precio <= 0) {
+          alert('El precio debe ser mayor a 0');
+          return;
+        }
+        
+        const createData = {
+          codigo: formData.codigo.trim(),
+          nombre: formData.nombre.trim(),
+          descripcion: formData.descripcion.trim(),
+          presentacion: formData.presentacion?.trim() || null,
+          precio: Number(formData.precio),
+          stock: formData.stock,
+          stockMinimo: formData.stockMinimo,
+          fechaVencimiento: formData.fechaVencimiento || null,
+          lote: formData.lote?.trim() || null,
+          fabricante: formData.fabricante?.trim() || null,
+          esVacuna: formData.esVacuna
+        };
+        
+        console.log('Creating product with data:', createData);
+        await productAPI.create(createData);
       }
       await loadProducts();
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving product:', error);
+      const errorMessage = error?.response?.data || error?.message || 'Error desconocido';
+      alert(`Error al guardar el producto: ${errorMessage}. Por favor, verifique que todos los campos estén completos y que el código sea único.`);
     }
   };
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setFormData({
+      codigo: product.codigo || '',
       nombre: product.nombre,
       descripcion: product.descripcion,
-      precioVenta: product.precioVenta,
+      presentacion: product.presentacion || '',
+      precio: product.precio || product.precioVenta || 0,
       stock: product.stock,
       stockMinimo: product.stockMinimo,
       fechaVencimiento: product.fechaVencimiento || '',
       lote: product.lote || '',
-      activo: product.activo || false
+      fabricante: product.fabricante || '',
+      esVacuna: product.esVacuna || false,
+      activo: product.activo !== undefined ? product.activo : true
     });
     setShowForm(true);
   };
@@ -105,7 +202,8 @@ const Products: React.FC = () => {
   const handleDelete = async (product: Product) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
       try {
-        await productAPI.delete({ id: product.id });
+        const productId = product.productId || parseInt(product.id || '0');
+        await productAPI.delete(productId);
         await loadProducts();
       } catch (error) {
         console.error('Error deleting product:', error);
@@ -115,7 +213,19 @@ const Products: React.FC = () => {
 
   const handleToggleActive = async (product: Product) => {
     try {
-      await productAPI.update({ ...product, activo: !product.activo });
+      const updateData = {
+        productId: product.productId || parseInt(product.id || '0'),
+        codigo: product.codigo || '',
+        nombre: product.nombre,
+        descripcion: product.descripcion,
+        presentacion: product.presentacion || null,
+        precio: Number(product.precio || product.precioVenta || 0),
+        stock: product.stock,
+        stockMinimo: product.stockMinimo,
+        fechaVencimiento: product.fechaVencimiento || null,
+        activo: !product.activo
+      };
+      await productAPI.update(updateData);
       await loadProducts();
     } catch (error) {
       console.error('Error toggling product status:', error);
@@ -124,13 +234,17 @@ const Products: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
+      codigo: '',
       nombre: '',
       descripcion: '',
-      precioVenta: 0,
+      presentacion: '',
+      precio: 0,
       stock: 0,
       stockMinimo: 0,
       fechaVencimiento: '',
       lote: '',
+      fabricante: '',
+      esVacuna: false,
       activo: true
     });
     setEditingProduct(null);
@@ -174,6 +288,21 @@ const Products: React.FC = () => {
           <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Código
+              </label>
+              <input
+                type="text"
+                name="codigo"
+                value={formData.codigo}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. PROD-001"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Nombre del Producto
               </label>
               <input
@@ -189,14 +318,28 @@ const Products: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
+                Presentación
+              </label>
+              <input
+                type="text"
+                name="presentacion"
+                value={formData.presentacion}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. 500ml, 1kg, etc."
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Precio Venta
               </label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="number"
-                  name="precioVenta"
-                  value={formData.precioVenta}
+                  name="precio"
+                  value={formData.precio}
                   onChange={handleInputChange}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   min="0"
@@ -247,11 +390,14 @@ const Products: React.FC = () => {
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Opcional - Algunos productos no tienen fecha de vencimiento
+              </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Lote
+                Número de Lote
               </label>
               <input
                 type="text"
@@ -259,8 +405,60 @@ const Products: React.FC = () => {
                 value={formData.lote}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="Ej. L123456"
+                placeholder="Ej: LOT-2024-001"
               />
+              <p className="mt-1 text-xs text-gray-500">
+                Opcional - Si aplica al producto
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fabricante / Marca
+              </label>
+              <input
+                type="text"
+                name="fabricante"
+                value={formData.fabricante}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej: Laboratorio XYZ, Nestlé Purina..."
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Opcional - Fabricante o marca del producto
+              </p>
+            </div>
+
+            {/* Checkbox para marcar si es vacuna */}
+            <div className="col-span-full">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="esVacuna"
+                  checked={formData.esVacuna}
+                  onChange={handleInputChange}
+                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                />
+                <label className="ml-2 block text-sm font-medium text-gray-700">
+                  Este producto es una vacuna
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Marque esta opción solo si el producto es una vacuna. Esto permitirá que aparezca en el módulo de vacunación.
+              </p>
+              
+              {/* Panel informativo solo si es vacuna */}
+              {formData.esVacuna && (
+                <div className="mt-3 bg-purple-50 border border-purple-200 rounded-md p-3 flex items-start">
+                  <Syringe className="h-5 w-5 text-purple-600 mr-2 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-purple-800">
+                    <p className="font-medium">✓ Producto marcado como vacuna</p>
+                    <p className="mt-1">
+                      Este producto aparecerá en el listado de vacunas disponibles al registrar aplicaciones de vacunación.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="col-span-full">
@@ -303,7 +501,12 @@ const Products: React.FC = () => {
       <div className="bg-white rounded-lg shadow">
         <div className="p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Productos Registrados</h2>
+            <div className="flex items-center space-x-3">
+              <h2 className="text-xl font-semibold text-gray-900">Productos Registrados</h2>
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+                {filteredProducts.length} {typeFilter === 'all' ? 'total' : typeFilter === 'vaccines' ? 'vacunas' : 'productos'}
+              </span>
+            </div>
             <button
               onClick={() => setShowForm(true)}
               className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center space-x-2"
@@ -313,17 +516,37 @@ const Products: React.FC = () => {
             </button>
           </div>
 
-          {/* Search */}
-          <div className="mb-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar productos"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              />
+          {/* Filtros y búsqueda */}
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Buscar
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, código, presentación..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tipo de producto
+              </label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              >
+                <option value="all">Todos los productos</option>
+                <option value="vaccines">Solo vacunas</option>
+                <option value="products">Solo productos regulares</option>
+              </select>
             </div>
           </div>
 
@@ -333,10 +556,13 @@ const Products: React.FC = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ID
+                    Código
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Producto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Presentación
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Descripción
@@ -348,7 +574,7 @@ const Products: React.FC = () => {
                     Stock
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lote
+                    Stock Mín.
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     F. Venc.
@@ -362,22 +588,36 @@ const Products: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50">
+                {paginatedData.map((product) => (
+                  <tr key={product.productId || product.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {product.id}
+                      {product.codigo || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <Package className="h-5 w-5 text-gray-400 mr-3" />
-                        <div className="text-sm font-medium text-gray-900">{product.nombre}</div>
+                        {product.esVacuna ? (
+                          <Syringe className="h-5 w-5 text-purple-500 mr-3" />
+                        ) : (
+                          <Package className="h-5 w-5 text-gray-400 mr-3" />
+                        )}
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{product.nombre}</div>
+                          {product.esVacuna && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              Vacuna
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {product.presentacion || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
                       {product.descripcion}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatCurrency(product.precioVenta)}
+                      {formatCurrency(product.precio || product.precioVenta || 0)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -392,7 +632,7 @@ const Products: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {product.lote || 'N/A'}
+                      {product.stockMinimo}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`text-sm ${
@@ -443,34 +683,15 @@ const Products: React.FC = () => {
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="mt-6 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">Items por página</span>
-              <select className="border border-gray-300 rounded-md px-2 py-1 text-sm">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">1-10 de {filteredProducts.length}</span>
-              <div className="flex space-x-1">
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &lt;&lt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &lt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &gt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &gt;&gt;
-                </button>
-              </div>
-            </div>
-          </div>
+          {/* Paginación */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredProducts.length}
+            itemsPerPage={10}
+            onPageChange={goToPage}
+            itemName="productos"
+          />
         </div>
       </div>
     </div>

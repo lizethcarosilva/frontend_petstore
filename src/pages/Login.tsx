@@ -24,13 +24,25 @@ const Login: React.FC = () => {
       
       if (success) {
         navigate('/dashboard');
-      } else {
-        setError('Credenciales inválidas. Por favor, verifica tu correo y contraseña.');
       }
-    } catch (err) {
+      // Si success es false, el error ya fue lanzado en el catch del login
+    } catch (err: any) {
       console.error('Error al iniciar sesión:', err);
-      setError('Error al iniciar sesión. Por favor, inténtalo de nuevo.');
-    } finally {
+      
+      // Extraer el mensaje de error
+      let errorMessage = 'Error desconocido al iniciar sesión';
+      
+      if (err?.message) {
+        errorMessage = err.message;
+      } else if (err?.response?.data) {
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
+        }
+      }
+      
+      setError(errorMessage);
       setIsLoading(false);
     }
   };

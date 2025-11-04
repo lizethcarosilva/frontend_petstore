@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   Calendar, 
   Package, 
-  DollarSign, 
-  TrendingUp, 
-  AlertTriangle,
+
   Clock,
   Users,
-  ShoppingCart,
   MessageCircle,
-  X
+  X,
+  Brain,
+  Minimize2
 } from 'lucide-react';
-import { dashboardAPI } from '../services/api';
+import { dashboardAPI, chatbotAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import Chatbot from '../components/Chatbot';
+import ClusteringDashboard from '../components/ClusteringDashboard';
 
 interface DashboardStats {
   totalUsers: number;
@@ -27,74 +28,71 @@ interface DashboardStats {
   expiringSoonProducts: number;
 }
 
-interface LowStockProduct {
-  id: string;
-  nombre: string;
-  stock: number;
-  stockMinimo: number;
-}
 
-interface ExpiringProduct {
-  id: string;
-  nombre: string;
-  lote: string;
-  fechaVencimiento: string;
-}
 
 const Dashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'chatbot'>('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([]);
-  const [expiringProducts, setExpiringProducts] = useState<ExpiringProduct[]>([]);
-  const [salesData, setSalesData] = useState<any[]>([]);
-  const [topProducts, setTopProducts] = useState<any[]>([]);
-  const [topServices, setTopServices] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
+  // Estados para IA
+  const [iaStats, setIaStats] = useState<any>(null);
+  const [tiposMascota, setTiposMascota] = useState<any>(null);
+  const [diasAtencion, setDiasAtencion] = useState<any>(null);
+  const [horasPico, setHorasPico] = useState<any>(null);
+  const [isLoadingIA, setIsLoadingIA] = useState(false);
+
+  // Estado para el chatbot flotante
+  const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+
   useEffect(() => {
     loadDashboardData();
+    loadIAStats();
   }, []);
 
   const loadDashboardData = async () => {
     try {
       setIsLoading(true);
-      
-      // Cargar datos del API
+
       const summaryResponse = await dashboardAPI.getSummary();
       setStats(summaryResponse.data);
 
-      const lowStockResponse = await dashboardAPI.getLowStockProducts();
-      setLowStockProducts(lowStockResponse.data.slice(0, 5));
-
-      const expiringResponse = await dashboardAPI.getExpiringSoonProducts();
-      setExpiringProducts(expiringResponse.data.slice(0, 5));
-
-      const salesResponse = await dashboardAPI.getSalesStats();
-      setSalesData(salesResponse.data);
-
-      const topProductsResponse = await dashboardAPI.getTopProducts();
-      setTopProducts(topProductsResponse.data.slice(0, 4));
-
-      const topServicesResponse = await dashboardAPI.getTopServices();
-      setTopServices(topServicesResponse.data.slice(0, 4));
-
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-    } finally {
+      setStats(null);
       setIsLoading(false);
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const loadIAStats = async () => {
+    try {
+      setIsLoadingIA(true);
+      
+      const statsResponse = await chatbotAPI.getEstadisticas();
+      setIaStats(statsResponse.data);
+
+      const tiposResponse = await chatbotAPI.getTiposMascota();
+      setTiposMascota(tiposResponse.data);
+
+      const diasResponse = await chatbotAPI.getDiasAtencion();
+      setDiasAtencion(diasResponse.data);
+
+      const horasResponse = await chatbotAPI.getHorasPico();
+      setHorasPico(horasResponse.data);
+
+    } catch (error) {
+      console.error('Error loading IA stats:', error);
+      // Si falla la conexión, establecer todo en null para ocultar las secciones
+      setIaStats(null);
+      setTiposMascota(null);
+      setDiasAtencion(null);
+      setHorasPico(null);
+    } finally {
+      setIsLoadingIA(false);
+    }
   };
 
-  const COLORS = ['#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+
 
   if (isLoading) {
     return (
@@ -105,289 +103,246 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* Header */}
-      <div className="bg-green-600 rounded-lg p-6 text-white">
+      <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-6 text-white shadow-lg">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Bienvenido, {user?.nombre}</h1>
-            <p className="text-green-100 mt-1">
-              Todo lo que tu mascota necesita, al alcance de un clic.
+            <h1 className="text-3xl font-bold">Bienvenido, {user?.name || 'Usuario'}</h1>
+            <p className="text-green-100 mt-2 text-lg">
+              Dashboard con Análisis de Inteligencia Artificial
             </p>
           </div>
+          <Brain className="h-16 w-16 opacity-80" />
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <Calendar className="h-8 w-8 text-blue-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Citas agendadas para hoy</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.todayAppointments || 0}</p>
+
+      {/* Mensaje cuando la API de IA no está disponible */}
+      {!iaStats && !isLoadingIA && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-6">
+          <div className="flex items-start">
+            <Brain className="h-6 w-6 text-blue-600 mr-3 flex-shrink-0 mt-1" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Análisis con Inteligencia Artificial
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                  ⚠️ No disponible
+                </span>
+              </h3>
+
             </div>
           </div>
         </div>
+      )}
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <Package className="h-8 w-8 text-green-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">No. de productos en inventario</p>
-              <p className="text-2xl font-bold text-gray-900">{stats?.totalProducts || 0}</p>
+      {/* Estadísticas de IA - Solo si hay datos disponibles */}
+      {iaStats && !isLoadingIA && (
+        <>
+          <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <Brain className="h-6 w-6 text-green-600 mr-2" />
+              <h2 className="text-xl font-bold text-gray-900">Análisis con Inteligencia Artificial</h2>
             </div>
+            <p className="text-sm text-gray-600 mt-1">
+              Insights generados por Machine Learning basados en tus datos
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                🟢 Conectado a IA
+              </span>
+            </p>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <DollarSign className="h-8 w-8 text-yellow-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Ventas del día</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.todaySales || 0)}</p>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white shadow-lg hover:shadow-xl transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm opacity-90">Total Mascotas</p>
+                  <p className="text-4xl font-bold mt-2">{iaStats.total_mascotas || 0}</p>
+                </div>
+                <Users className="h-12 w-12 opacity-80" />
+              </div>
             </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <TrendingUp className="h-8 w-8 text-purple-600" />
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Ventas del mes</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats?.monthSales || 0)}</p>
-              <div className="flex items-center text-green-600">
-                <TrendingUp className="h-4 w-4 mr-1" />
-                <span className="text-sm">+12%</span>
+            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white shadow-lg hover:shadow-xl transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm opacity-90">Total Clientes</p>
+                  <p className="text-4xl font-bold mt-2">{iaStats.total_clientes || 0}</p>
+                </div>
+                <Users className="h-12 w-12 opacity-80" />
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-6 text-white shadow-lg hover:shadow-xl transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm opacity-90">Total Citas</p>
+                  <p className="text-4xl font-bold mt-2">{iaStats.total_citas || 0}</p>
+                </div>
+                <Calendar className="h-12 w-12 opacity-80" />
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg p-6 text-white shadow-lg hover:shadow-xl transition-shadow duration-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm opacity-90">Total Servicios</p>
+                  <p className="text-4xl font-bold mt-2">{iaStats.total_servicios || 0}</p>
+                </div>
+                <Package className="h-12 w-12 opacity-80" />
               </div>
             </div>
           </div>
+        </>
+      )}
+
+      {/* Tipo de Mascota Más Común */}
+      {tiposMascota && !isLoadingIA && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <Brain className="h-5 w-5 text-green-600 mr-2" />
+            Tipo de Mascota Más Común (IA)
+          </h3>
+          <div className="text-center py-6 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg mb-4">
+            <div className="text-7xl mb-3">
+              {tiposMascota.tipo_mas_comun === 'Perro' ? '🐕' : 
+               tiposMascota.tipo_mas_comun === 'Gato' ? '🐱' : '🐾'}
+            </div>
+            <p className="text-3xl font-bold text-green-600">{tiposMascota.tipo_mas_comun}</p>
+            <p className="text-sm text-gray-600 mt-2">
+              {tiposMascota.estadisticas && tiposMascota.estadisticas[0]?.porcentaje.toFixed(1)}% del total
+            </p>
+          </div>
+          <div className="space-y-3">
+            {tiposMascota.estadisticas?.slice(0, 4).map((tipo: any, index: number) => (
+              <div key={index}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-medium text-gray-700">{tipo.tipo_mascota}</span>
+                  <span className="text-sm text-gray-600">{tipo.total_mascotas}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-gradient-to-r from-green-500 to-green-600 h-2.5 rounded-full transition-all duration-500"
+                    style={{ width: `${tipo.porcentaje}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Análisis Temporal con IA */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Día con Más Atención */}
+        {diasAtencion && diasAtencion.estadisticas && diasAtencion.estadisticas.length > 0 && !isLoadingIA && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Calendar className="h-5 w-5 text-blue-600 mr-2" />
+              Día con Más Atención (IA)
+            </h3>
+            <div className="text-center py-4 mb-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg">
+              <p className="text-5xl font-bold text-blue-600">{diasAtencion.dia_mas_atencion}</p>
+              <p className="text-sm text-gray-600 mt-2">Día más concurrido de la semana</p>
+            </div>
+            <div className="h-64" style={{ minHeight: '256px' }}>
+              <ResponsiveContainer width="100%" height="100%" minHeight={256}>
+                <BarChart data={diasAtencion.estadisticas.slice(0, 7)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="dia_semana" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="total_citas" fill="#3B82F6" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Hora Pico */}
+        {horasPico && horasPico.estadisticas && horasPico.estadisticas.length > 0 && !isLoadingIA && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+              <Clock className="h-5 w-5 text-purple-600 mr-2" />
+              Hora Pico de Atención (IA)
+            </h3>
+            <div className="text-center py-4 mb-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg">
+              <p className="text-5xl font-bold text-purple-600">{horasPico.hora_pico}:00</p>
+              <p className="text-sm text-gray-600 mt-2">Hora con más citas del día</p>
+            </div>
+            <div className="h-64" style={{ minHeight: '256px' }}>
+              <ResponsiveContainer width="100%" height="100%" minHeight={256}>
+                <BarChart data={horasPico.estadisticas.slice(0, 12)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="hora" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="total_citas" fill="#A855F7" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Main Content Tabs */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8 px-6">
+      {/* Dashboard de Clustering - Solo si la API de IA está disponible */}
+      {iaStats && !isLoadingIA && (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex items-center mb-4">
+            <Brain className="h-6 w-6 text-purple-600 mr-2" />
+            <h2 className="text-2xl font-bold text-gray-900">Análisis de Clustering con Machine Learning</h2>
+          </div>
+          <p className="text-sm text-gray-600 mb-6">
+            Descubre patrones ocultos y segmentaciones inteligentes en tus datos
+          </p>
+          <ClusteringDashboard />
+        </div>
+      )}
+
+      {/* Botón flotante del Chatbot */}
+      <button
+        onClick={() => setIsChatbotOpen(!isChatbotOpen)}
+        className={`fixed bottom-6 right-6 ${
+          isChatbotOpen ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'
+        } text-white rounded-full p-4 shadow-2xl hover:shadow-3xl transition-all duration-300 z-50 group`}
+        aria-label={isChatbotOpen ? 'Cerrar chatbot' : 'Abrir chatbot'}
+      >
+        {isChatbotOpen ? (
+          <X className="h-7 w-7" />
+        ) : (
+          <>
+            <MessageCircle className="h-7 w-7 group-hover:scale-110 transition-transform duration-200" />
+            <span className="absolute -top-1 -right-1 flex h-4 w-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500"></span>
+            </span>
+          </>
+        )}
+      </button>
+
+      {/* Panel del Chatbot */}
+      {isChatbotOpen && (
+        <div className="fixed bottom-24 right-6 w-[450px] h-[700px] bg-white rounded-lg shadow-2xl z-50 flex flex-col overflow-hidden border-2 border-green-200">
+          <div className="bg-gradient-to-r from-green-600 to-green-700 p-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <MessageCircle className="h-6 w-6 text-white mr-2" />
+              <div>
+                <h3 className="text-white font-semibold">Asistente Virtual IA</h3>
+                <p className="text-green-100 text-xs">Powered by Machine Learning</p>
+              </div>
+            </div>
             <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'dashboard'
-                  ? 'border-green-500 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+              onClick={() => setIsChatbotOpen(false)}
+              className="text-white hover:bg-green-700 rounded-full p-1 transition-colors duration-200"
             >
-              Dashboard
+              <Minimize2 className="h-5 w-5" />
             </button>
-            <button
-              onClick={() => setActiveTab('chatbot')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'chatbot'
-                  ? 'border-green-500 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <MessageCircle className="inline h-4 w-4 mr-2" />
-              Chatbot
-            </button>
-          </nav>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <Chatbot usuarioId={user?.user_id?.toString()} />
+          </div>
         </div>
-
-        <div className="p-6">
-          {activeTab === 'dashboard' ? (
-            <div className="space-y-6">
-              {/* Summary Statistics */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
-                  <div className="bg-white border rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                      Número de productos y/o servicios
-                    </h3>
-                    <div className="text-center">
-                      <div className="text-4xl font-bold text-green-600 mb-2">
-                        {(stats?.totalProducts || 0) + (stats?.totalServices || 0)}
-                      </div>
-                      <p className="text-sm text-gray-600">Total disponibles</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-2 space-y-4">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-600">Valor de productos vendidos</span>
-                      <span className="text-lg font-bold text-green-600">{formatCurrency(stats?.todaySales || 0)}</span>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium text-gray-600">Valor de servicios generados</span>
-                      <span className="text-lg font-bold text-blue-600">{formatCurrency(stats?.monthSales || 0)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Products Expiring Soon */}
-              <div className="bg-white border rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Productos próximos a vencer
-                </h3>
-                <div className="space-y-3">
-                  {expiringProducts.map((product, index) => (
-                    <div key={product.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                          <span className="text-sm font-medium text-red-600">{index + 1}</span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{product.nombre}</p>
-                          <p className="text-sm text-gray-600">Lote: {product.lote}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-medium text-red-600">F. venc.: {product.fechaVencimiento}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Performance and Alerts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white border rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Productos con mayor rendimiento
-                  </h3>
-                  <div className="space-y-3">
-                    {topProducts.map((product: any, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <TrendingUp className="h-4 w-4 text-green-600 mr-2" />
-                          <span className="text-sm font-medium text-gray-900">{product.nombre}</span>
-                        </div>
-                        <span className="text-sm text-gray-600">{index + 1}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-white border rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Alerta de bajo inventario
-                  </h3>
-                  <div className="space-y-3">
-                    {lowStockProducts.map((product) => (
-                      <div key={product.id} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-gray-900">{product.nombre}</span>
-                          <span className="text-sm text-gray-600">{product.stock}/{product.stockMinimo}</span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-red-600 h-2 rounded-full" 
-                            style={{ width: `${(product.stock / product.stockMinimo) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Sales Chart */}
-              <div className="bg-white border rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Indicador de ventas: Mes en curso vs Anterior
-                </h3>
-                <div className="h-64 min-h-[200px]">
-                  {salesData && salesData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                      <LineChart data={salesData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                        <Line type="monotone" dataKey="current" stroke="#10B981" strokeWidth={2} />
-                        <Line type="monotone" dataKey="previous" stroke="#6B7280" strokeWidth={2} strokeDasharray="5 5" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-500">
-                      <div className="text-center">
-                        <TrendingUp className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                        <p>Cargando datos de ventas...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="h-96 bg-white border rounded-lg p-6 flex flex-col">
-              <div className="flex items-center mb-4">
-                <MessageCircle className="h-6 w-6 text-green-600 mr-2" />
-                <h3 className="text-lg font-semibold text-gray-900">Asistente Virtual</h3>
-              </div>
-              
-              {/* Chat Messages Area */}
-              <div className="flex-1 bg-gray-50 rounded-lg p-4 mb-4 overflow-y-auto">
-                <div className="space-y-3">
-                  {/* Welcome message */}
-                  <div className="flex justify-start">
-                    <div className="bg-white border rounded-lg p-3 max-w-xs">
-                      <p className="text-sm text-gray-700">
-                        ¡Hola! Soy tu asistente virtual. ¿En qué puedo ayudarte hoy?
-                      </p>
-                      <span className="text-xs text-gray-500">Ahora</span>
-                    </div>
-                  </div>
-                  
-                  {/* User message example */}
-                  <div className="flex justify-end">
-                    <div className="bg-green-600 text-white rounded-lg p-3 max-w-xs">
-                      <p className="text-sm">¿Cuántos productos tengo en stock bajo?</p>
-                      <span className="text-xs text-green-100">Hace 1 min</span>
-                    </div>
-                  </div>
-                  
-                  {/* Bot response example */}
-                  <div className="flex justify-start">
-                    <div className="bg-white border rounded-lg p-3 max-w-xs">
-                      <p className="text-sm text-gray-700">
-                        Actualmente tienes 3 productos con stock bajo: Alimento Premium (2 unidades), Jabón Antiséptico (1 unidad) y Vitaminas (3 unidades).
-                      </p>
-                      <span className="text-xs text-gray-500">Hace 1 min</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Input Area */}
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  placeholder="Escribe tu pregunta aquí..."
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                />
-                <button className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                </button>
-              </div>
-              
-              {/* Status indicator */}
-              <div className="flex items-center justify-center mt-2">
-                <div className="flex items-center text-sm text-gray-500">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                  <span>Conectado</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 };

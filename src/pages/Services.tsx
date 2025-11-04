@@ -3,7 +3,6 @@ import {
   Plus, 
   Search, 
   Edit, 
-  Trash2, 
   Save, 
   X, 
   Package,
@@ -13,8 +12,12 @@ import {
 } from 'lucide-react';
 import { serviceAPI } from '../services/api';
 import type { Service } from '../types/types';
+import { useAuth } from '../contexts/AuthContext';
+import { usePagination } from '../hooks/usePagination';
+import Pagination from '../components/Pagination';
 
 const Services: React.FC = () => {
+  const { user } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [filteredServices, setFilteredServices] = useState<Service[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,10 +25,23 @@ const Services: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
   const [formData, setFormData] = useState({
+    codigo: '',
     nombre: '',
     descripcion: '',
     precio: 0,
+    duracionMinutos: 0,
     activo: true
+  });
+
+  // Hook de paginación
+  const {
+    currentPage,
+    totalPages,
+    paginatedData,
+    goToPage
+  } = usePagination({
+    data: filteredServices,
+    itemsPerPage: 10
   });
 
   useEffect(() => {
@@ -51,8 +67,9 @@ const Services: React.FC = () => {
 
   const filterServices = () => {
     const filtered = services.filter(service =>
-      service.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      service.descripcion.toLowerCase().includes(searchTerm.toLowerCase())
+      service.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.descripcion?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      service.codigo?.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredServices(filtered);
   };
@@ -62,7 +79,9 @@ const Services: React.FC = () => {
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
-              type === 'number' ? parseFloat(value) || 0 : value
+              (name === 'precio' ? (parseFloat(value) || 0) :
+               name === 'duracionMinutos' ? (parseInt(value) || 0) :
+               type === 'number' ? (parseInt(value) || 0) : value)
     }));
   };
 
@@ -70,24 +89,97 @@ const Services: React.FC = () => {
     e.preventDefault();
     try {
       if (editingService) {
-        await serviceAPI.update({ ...formData, id: editingService.id });
+        // Preparar datos para actualización según Service model del backend
+        const updateData = {
+          serviceId: editingService.serviceId || parseInt(editingService.id || '0'),
+          codigo: formData.codigo,
+          nombre: formData.nombre,
+          descripcion: formData.descripcion,
+          precio: Number(formData.precio),
+          duracionMinutos: formData.duracionMinutos > 0 ? formData.duracionMinutos : null,
+          activo: formData.activo
+        };
+        await serviceAPI.update(updateData);
       } else {
-        await serviceAPI.create(formData);
+        // Preparar datos para creación según ServiceCreateDto
+        // Validar que el precio sea mayor a 0
+        if (formData.precio <= 0) {
+          alert('El precio debe ser mayor a 0');
+          return;
+        }
+        
+        // Validar que el código no esté vacío
+        if (!formData.codigo || formData.codigo.trim() === '') {
+          alert('El código es obligatorio');
+          return;
+        }
+        
+        const createData = {
+          codigo: formData.codigo.trim(),
+          nombre: formData.nombre.trim(),
+          descripcion: formData.descripcion.trim(),
+          precio: Number(formData.precio),
+          duracionMinutos: formData.duracionMinutos > 0 ? formData.duracionMinutos : null
+        };
+        
+        // Decodificar el token para verificar que contiene tenantId
+        const token = localStorage.getItem('token');
+        if (token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            console.log('Token payload:', payload);
+            console.log('Token tenantId:', payload.tenantId);
+          } catch (e) {
+            console.error('Error decoding token:', e);
+          }
+        }
+        
+        console.log('Creating service with data:', createData);
+        console.log('User tenantId:', user?.tenantId);
+        console.log('Token present:', !!token);
+        
+        const response = await serviceAPI.create(createData);
+        console.log('Service created successfully:', response);
       }
       await loadServices();
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving service:', error);
+      console.error('Error response:', error?.response);
+      console.error('Error data:', error?.response?.data);
+      
+      let errorMessage = 'Error desconocido';
+      
+      if (error?.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        } else {
+          errorMessage = JSON.stringify(error.response.data);
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      // Si el error menciona tenant_id, es un problema del backend
+      if (errorMessage.toLowerCase().includes('tenant') || errorMessage.toLowerCase().includes('null')) {
+        alert(`Error del servidor: El sistema no puede obtener el tenant_id. Por favor, cierre sesión y vuelva a iniciar sesión. Si el problema persiste, contacte al administrador.\n\nDetalle: ${errorMessage}`);
+      } else {
+        alert(`Error al guardar el servicio: ${errorMessage}\n\nPor favor, verifique que:\n- El código sea único\n- Todos los campos estén completos\n- El precio sea mayor a 0`);
+      }
     }
   };
 
   const handleEdit = (service: Service) => {
     setEditingService(service);
     setFormData({
+      codigo: service.codigo || '',
       nombre: service.nombre,
       descripcion: service.descripcion,
       precio: service.precio,
-      activo: service.activo || false
+      duracionMinutos: service.duracionMinutos || 0,
+      activo: service.activo !== undefined ? service.activo : true
     });
     setShowForm(true);
   };
@@ -95,7 +187,8 @@ const Services: React.FC = () => {
   const handleDelete = async (service: Service) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este servicio?')) {
       try {
-        await serviceAPI.delete({ id: service.id });
+        const serviceId = service.serviceId || parseInt(service.id || '0');
+        await serviceAPI.delete(serviceId);
         await loadServices();
       } catch (error) {
         console.error('Error deleting service:', error);
@@ -105,7 +198,16 @@ const Services: React.FC = () => {
 
   const handleToggleActive = async (service: Service) => {
     try {
-      await serviceAPI.update({ ...service, activo: !service.activo });
+      const updateData = {
+        serviceId: service.serviceId || parseInt(service.id || '0'),
+        codigo: service.codigo || '',
+        nombre: service.nombre,
+        descripcion: service.descripcion,
+        precio: Number(service.precio),
+        duracionMinutos: service.duracionMinutos && service.duracionMinutos > 0 ? service.duracionMinutos : null,
+        activo: !service.activo
+      };
+      await serviceAPI.update(updateData);
       await loadServices();
     } catch (error) {
       console.error('Error toggling service status:', error);
@@ -114,9 +216,11 @@ const Services: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
+      codigo: '',
       nombre: '',
       descripcion: '',
       precio: 0,
+      duracionMinutos: 0,
       activo: true
     });
     setEditingService(null);
@@ -150,7 +254,22 @@ const Services: React.FC = () => {
           <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Descripción
+                Código
+              </label>
+              <input
+                type="text"
+                name="codigo"
+                value={formData.codigo}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. CONS-001"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Nombre del Servicio
               </label>
               <input
                 type="text"
@@ -182,9 +301,24 @@ const Services: React.FC = () => {
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Duración (minutos)
+              </label>
+              <input
+                type="number"
+                name="duracionMinutos"
+                value={formData.duracionMinutos}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. 30"
+                min="0"
+              />
+            </div>
+
             <div className="col-span-full">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Presentación/Descripción
+                Descripción
               </label>
               <textarea
                 name="descripcion"
@@ -252,33 +386,33 @@ const Services: React.FC = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    ID
+                    Código
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nombre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Descripción
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Presentación/Descripción
+                    Precio
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Precio Venta
+                    Duración (min)
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cantidad
+                    Estado
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Editar
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Activo
+                    Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredServices.map((service) => (
-                  <tr key={service.id} className="hover:bg-gray-50">
+                {paginatedData.map((service) => (
+                  <tr key={service.serviceId || service.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {service.id}
+                      {service.codigo || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -286,22 +420,14 @@ const Services: React.FC = () => {
                         <div className="text-sm font-medium text-gray-900">{service.nombre}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 text-sm text-gray-900">
                       {service.descripcion}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {formatCurrency(service.precio)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      0
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => handleEdit(service)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
+                      {service.duracionMinutos ? `${service.duracionMinutos} min` : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
@@ -325,39 +451,38 @@ const Services: React.FC = () => {
                         )}
                       </button>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(service)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
-          <div className="mt-6 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">Items por página</span>
-              <select className="border border-gray-300 rounded-md px-2 py-1 text-sm">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-700">1-10 de {filteredServices.length}</span>
-              <div className="flex space-x-1">
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &lt;&lt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &lt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &gt;
-                </button>
-                <button className="px-2 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50">
-                  &gt;&gt;
-                </button>
-              </div>
-            </div>
+          {/* Paginación */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredServices.length}
+            itemsPerPage={10}
+            onPageChange={goToPage}
+            itemName="servicios"
+          />
+
+          {/* Action Buttons */}
+          <div className="mt-6 flex space-x-4">
+            <button 
+              className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => window.location.href = '/'}
+            >
+              <span>Regresar al Menú Principal</span>
+            </button>
           </div>
         </div>
       </div>

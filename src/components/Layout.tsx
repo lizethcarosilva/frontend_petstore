@@ -10,30 +10,53 @@ import {
   Heart,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  Syringe,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTenant } from '../contexts/TenantContext';
 import { tenantAPI } from '../services/api';
+import type { Tenant } from '../types/types';
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { selectedTenantId, setSelectedTenantId } = useTenant();
   const [tenantName, setTenantName] = useState<string>('PET STORE');
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [isLoadingTenants, setIsLoadingTenants] = useState(false);
   
-  console.log('Usuario actual:', user);
-
-  const navigationItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: Home },
-    { name: 'Usuarios', path: '/users', icon: Users },
-    { name: 'Tenants', path: '/tenants', icon: Building2 },
-    { name: 'Mascotas', path: '/pets', icon: Heart },
-    { name: 'Servicios', path: '/services', icon: Package },
-    { name: 'Productos', path: '/products', icon: Package },
-    { name: 'Facturas', path: '/invoices', icon: FileText },
-    { name: 'Citas', path: '/appointments', icon: Calendar },
+  // Verificar roles del usuario
+  const userRolId = user?.rol_id?.toString() || '';
+  const isSuperAdmin = userRolId === '1';
+  const isAdmin = userRolId === '2';
+  
+  // Definir todos los items de navegación con sus permisos
+  const allNavigationItems = [
+    { name: 'Dashboard', path: '/dashboard', icon: Home, allowedRoles: ['all'] },
+    { name: 'Usuarios', path: '/users', icon: Users, allowedRoles: ['1', '2'] }, // SuperAdmin y Admin
+    { name: 'Clientes', path: '/clients', icon: UserCheck, allowedRoles: ['all'] }, // Todos pueden ver clientes
+    { name: 'Tenants', path: '/tenants', icon: Building2, allowedRoles: ['1'] }, // Solo SuperAdmin
+    { name: 'Mascotas', path: '/pets', icon: Heart, allowedRoles: ['all'] },
+    { name: 'Servicios', path: '/services', icon: Package, allowedRoles: ['all'] },
+    { name: 'Productos', path: '/products', icon: Package, allowedRoles: ['all'] },
+    { name: 'Facturas', path: '/invoices', icon: FileText, allowedRoles: ['all'] },
+    { name: 'Citas', path: '/appointments', icon: Calendar, allowedRoles: ['all'] },
+    { name: 'Historial Clínico', path: '/medical-history', icon: ClipboardList, allowedRoles: ['all'] }, // Todos pueden ver
+    { name: 'Vacunaciones', path: '/vaccinations', icon: Syringe, allowedRoles: ['all'] }, // Todos pueden ver
   ];
+
+  // Filtrar items de navegación según el rol del usuario
+  const navigationItems = allNavigationItems.filter(item => {
+    if (item.allowedRoles.includes('all')) {
+      return true;
+    }
+    return item.allowedRoles.includes(userRolId);
+  });
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -47,31 +70,52 @@ const Layout: React.FC = () => {
     navigate('/login');
   };
 
-  // Cargar el nombre del tenant cuando el usuario esté disponible
+  // Cargar todos los tenants si es SuperAdmin
+  useEffect(() => {
+    if (isSuperAdmin) {
+      const loadTenants = async () => {
+        try {
+          setIsLoadingTenants(true);
+          const response = await tenantAPI.getAll();
+          if (Array.isArray(response.data)) {
+            setTenants(response.data);
+          }
+        } catch (error) {
+          console.error('Error loading tenants:', error);
+        } finally {
+          setIsLoadingTenants(false);
+        }
+      };
+      loadTenants();
+    }
+  }, [isSuperAdmin]);
+
+  // Cargar el nombre del tenant cuando el tenant seleccionado cambie
   useEffect(() => {
     const loadTenantName = async () => {
-      if (user?.tenantId) {
+      const tenantIdToLoad = selectedTenantId || user?.tenantId;
+      if (tenantIdToLoad) {
         try {
-          console.log('Cargando tenant con ID:', user.tenantId);
-          // getById ya construye el body automáticamente
-          const response = await tenantAPI.getById(user.tenantId);
-          console.log('Respuesta del tenant:', response.data);
-
-          // response.data ya es el objeto del tenant, no un array
+          const response = await tenantAPI.getById(tenantIdToLoad);
           if (response && response.data && response.data.razonSocial) {
             setTenantName(response.data.razonSocial);
-            console.log('Nombre del tenant cargado:', response.data.razonSocial);
           }
         } catch (error) {
           console.error('Error al cargar el nombre del tenant:', error);
-          // Mantener el valor por defecto si hay error
           setTenantName('PET STORE');
         }
       }
     };
 
     loadTenantName();
-  }, [user?.tenantId]); // Se ejecuta cuando cambia el tenantId del usuario
+  }, [selectedTenantId, user?.tenantId]);
+
+  const handleTenantChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newTenantId = event.target.value || null;
+    setSelectedTenantId(newTenantId);
+    // Recargar la página para actualizar todos los datos
+    window.location.reload();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -167,13 +211,33 @@ const Layout: React.FC = () => {
               <Menu className="h-6 w-6" />
             </button>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 flex-1">
               <h1 className="text-xl font-semibold text-gray-900">
                 {navigationItems.find(item => isActive(item.path))?.name || 'Dashboard'}
               </h1>
-              <h1 className="text-xl font-semibold text-gray-900">
-
-              </h1>
+              
+              {/* Selector de Tenant para SuperAdmin */}
+              {isSuperAdmin && (
+                <div className="ml-auto flex items-center space-x-2">
+                  <label htmlFor="tenant-select" className="text-sm font-medium text-gray-700">
+                    Tenant:
+                  </label>
+                  <select
+                    id="tenant-select"
+                    value={selectedTenantId || ''}
+                    onChange={handleTenantChange}
+                    disabled={isLoadingTenants}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Seleccionar tenant</option>
+                    {tenants.map((tenant) => (
+                      <option key={tenant.tenantId} value={tenant.tenantId}>
+                        {tenant.razonSocial}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </div>

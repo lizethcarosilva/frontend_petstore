@@ -3,34 +3,46 @@ import {
   Plus, 
   Search, 
   Edit, 
-  Trash2, 
   Save, 
   X, 
   Heart,
-  User,
-  Printer
+  User
 } from 'lucide-react';
-import { petAPI, userAPI } from '../services/api';
-import type { Pet, User as UserType } from '../types/types';
-import { useAuth } from '../contexts/AuthContext';
+import { petAPI, userAPI, clientAPI, rolesAPI } from '../services/api';
+import type { Pet, User as UserType, ClientResponseDto } from '../types/types';
+import { usePagination } from '../hooks/usePagination';
+import Pagination from '../components/Pagination';
 
 const Pets: React.FC = () => {
   const [pets, setPets] = useState<Pet[]>([]);
   const [filteredPets, setFilteredPets] = useState<Pet[]>([]);
-  const [owners, setOwners] = useState<UserType[]>([]);
-  console.log('owners***********', owners);
+  const [owners, setOwners] = useState<ClientResponseDto[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false); 
-   const { user } = useAuth();
+  const [showForm, setShowForm] = useState(false);
   const [editingPet, setEditingPet] = useState<Pet | null>(null);
+  const ownerSelectRef = React.useRef<HTMLSelectElement>(null);
   const [formData, setFormData] = useState({
-    identificacionPropietario: '',
+    ownerIds: [] as number[],
     nombre: '',
     tipo: '',
     raza: '',
     cuidadosEspeciales: '',
-    activo: true
+    edad: '',
+    sexo: '',
+    color: ''
+  });
+
+  // Hook de paginación
+  const {
+    currentPage,
+    totalPages,
+    paginatedData,
+    goToPage
+  } = usePagination({
+    data: filteredPets,
+    itemsPerPage: 10
   });
 
   useEffect(() => {
@@ -46,8 +58,9 @@ const Pets: React.FC = () => {
     try {
       setIsLoading(true);
       const response = await petAPI.getAll();
-      setPets(response.data);
-      setFilteredPets(response.data);
+      const petsData = Array.isArray(response.data) ? response.data : [];
+      setPets(petsData);
+      setFilteredPets(petsData);
     } catch (error) {
       console.error('Error loading pets:', error);
     } finally {
@@ -55,25 +68,48 @@ const Pets: React.FC = () => {
     }
   };
 
+  const loadRoles = async () => {
+    try {
+      const response = await rolesAPI.getAll();
+      if (Array.isArray(response.data)) {
+        console.log('Roles cargados:', response.data.map(r => ({ id: r.rolId, nombre: r.nombre, desc: r.descripcion })));
+        setRoles(response.data);
+      }
+    } catch (error: any) {
+      console.error('Error loading roles:', error);
+      // Si falla, usar roles conocidos como fallback
+      const defaultRoles = [
+        { rolId: '5', nombre: 'Cliente general', descripcion: 'Cliente' },
+        { rolId: '6', nombre: 'Propietario', descripcion: 'Cliente' },
+      ];
+      console.warn('Usando roles por defecto debido a error:', defaultRoles);
+      setRoles(defaultRoles);
+    }
+  };
+
   const loadOwners = async () => {
     try {
-      const response = await userAPI.getIdTenant(user?.tenantId || '');
-      console.log('response owners:', response);
-      console.log('response.data:', response.data);
+      console.log('Cargando clientes...');
       
-      // Verificar que response.data sea un array
-      if (Array.isArray(response.data)) {
-        setOwners(response.data);
-      } else if (response.data) {
-        // Si es un objeto, convertirlo a array
-        setOwners([response.data]);
+      // Cargar CLIENTES desde el nuevo endpoint /api/clients
+      const clientsResponse = await clientAPI.getAll();
+      console.log('✅ Clientes cargados:', clientsResponse.data?.length || 0);
+      
+      if (Array.isArray(clientsResponse.data)) {
+        // Filtrar solo clientes activos
+        const activeClients = clientsResponse.data.filter((client: ClientResponseDto) => 
+          client.activo !== false
+        );
+        
+        console.log(`✅ Clientes activos: ${activeClients.length}`);
+        setOwners(activeClients);
       } else {
-        // Si no hay datos, usar array vacío
+        console.warn('clientsResponse.data no es un array:', clientsResponse.data);
         setOwners([]);
       }
     } catch (error) {
-      console.error('Error loading owners:', error);
-      setOwners([]); // Array vacío en caso de error
+      console.error('Error loading clients:', error);
+      setOwners([]);
     }
   };
 
@@ -81,78 +117,227 @@ const Pets: React.FC = () => {
 
 
   const filterPets = () => {
-    const filtered = pets.filter(pet =>
-      pet.identificacionPropietario ||
-      pet.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pet.tipo.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = pets.filter(pet => {
+      // Los owners pueden venir como OwnerInfoDto o User, mapear para obtener ident
+      const ownerIdents = pet.owners?.map((owner: any) => owner.ident || '').filter((i: string) => i).join(',') || '';
+      return (
+        ownerIdents.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        pet.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        pet.tipo.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
     setFilteredPets(filtered);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
-    }));
+    // El selector de propietarios se maneja directamente en el onChange del select
+    if (name !== 'addOwner') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar que haya al menos un propietario
+    if (formData.ownerIds.length === 0) {
+      alert('Debe seleccionar al menos un propietario');
+      return;
+    }
+
     try {
+      const submitData = {
+        nombre: formData.nombre,
+        tipo: formData.tipo,
+        raza: formData.raza,
+        cuidadosEspeciales: formData.cuidadosEspeciales || '',
+        edad: formData.edad ? parseInt(formData.edad.toString()) : undefined,
+        sexo: formData.sexo,
+        color: formData.color || '',
+        ownerIds: formData.ownerIds // Asegurar que sea un array de números
+      };
+
+      console.log('Submitting data:', submitData);
+      console.log('Owner IDs:', formData.ownerIds);
+
+      let createdPetId: number | undefined;
+
       if (editingPet) {
-        await petAPI.update({ ...formData, id: editingPet.id });
+        // Obtener los propietarios actuales de la mascota usando el endpoint getOwners
+        let currentOwnerIds: number[] = [];
+        try {
+          const ownersResponse = await petAPI.getOwners(editingPet.petId!);
+          console.log('Owners response from getOwners:', ownersResponse.data);
+          if (Array.isArray(ownersResponse.data)) {
+            currentOwnerIds = ownersResponse.data
+              .map((owner: any) => {
+                // OwnerInfoDto tiene userId
+                const ownerId = owner.userId;
+                return ownerId ? parseInt(String(ownerId)) : 0;
+              })
+              .filter((id: number) => id > 0);
+          }
+        } catch (error) {
+          console.error('Error getting current pet owners:', error);
+          // Si falla, usar los propietarios que ya tenemos en editingPet como fallback
+          if (editingPet.owners && Array.isArray(editingPet.owners)) {
+            currentOwnerIds = editingPet.owners
+              .map((owner: any) => {
+                const ownerId = owner.userId || owner.user_id;
+                return ownerId ? parseInt(String(ownerId)) : 0;
+              })
+              .filter((id: number) => id > 0);
+          }
+        }
+
+        // Actualizar la mascota primero (sin propietarios, esos se manejan después)
+        const updateResponse = await petAPI.update({ ...submitData, petId: editingPet.petId });
+        console.log('Update response:', updateResponse);
+
+        // Identificar propietarios a agregar y a eliminar
+        const ownersToAdd = formData.ownerIds.filter(id => !currentOwnerIds.includes(id));
+        const ownersToRemove = currentOwnerIds.filter((id: number) => !formData.ownerIds.includes(id));
+
+        console.log('Current owners:', currentOwnerIds);
+        console.log('Owners to add:', ownersToAdd);
+        console.log('Owners to remove:', ownersToRemove);
+
+        // Eliminar propietarios que ya no están en la lista
+        for (const ownerId of ownersToRemove) {
+          try {
+            await petAPI.removeOwner(editingPet.petId!, ownerId);
+          } catch (error) {
+            console.error(`Error removing owner ${ownerId}:`, error);
+          }
+        }
+
+        // Agregar nuevos propietarios
+        for (const ownerId of ownersToAdd) {
+          try {
+            await petAPI.addOwner(editingPet.petId!, ownerId);
+          } catch (error) {
+            console.error(`Error adding owner ${ownerId}:`, error);
+          }
+        }
       } else {
-        await petAPI.create(formData);
+        // Crear nueva mascota
+        const createResponse = await petAPI.create(submitData);
+        console.log('Create response:', createResponse);
+        
+        // El backend debería crear la mascota con los ownerIds proporcionados
+        // Si no, agregar los propietarios uno por uno
+        createdPetId = createResponse.data?.petId;
+        
+        if (createdPetId && formData.ownerIds.length > 0) {
+          // Agregar propietarios uno por uno por si el backend no procesó los ownerIds en create
+          for (const ownerId of formData.ownerIds) {
+            try {
+              await petAPI.addOwner(createdPetId, ownerId);
+            } catch (error) {
+              console.error(`Error adding owner ${ownerId} to new pet:`, error);
+            }
+          }
+        }
       }
+
       await loadPets();
       resetForm();
     } catch (error) {
       console.error('Error saving pet:', error);
+      alert('Error al guardar la mascota. Por favor, intente nuevamente.');
     }
   };
 
-  const handleEdit = (pet: Pet) => {
+  const handleEdit = async (pet: Pet) => {
     setEditingPet(pet);
+    
+    // Recargar roles primero si no están cargados, luego propietarios
+    if (roles.length === 0) {
+      await loadRoles();
+    }
+    await loadOwners();
+    
+    // Extract owner IDs from the pet's owners array
+    let ownerIds: number[] = [];
+    
+    // Intentar obtener los propietarios usando el endpoint getOwners
+    try {
+      const ownersResponse = await petAPI.getOwners(pet.petId!);
+      console.log('Owners response from getOwners:', ownersResponse.data);
+      if (Array.isArray(ownersResponse.data)) {
+        ownerIds = ownersResponse.data
+          .map((owner: any) => {
+            // OwnerInfoDto tiene userId
+            const ownerId = owner.userId;
+            return ownerId ? parseInt(String(ownerId)) : 0;
+          })
+          .filter((id: number) => id > 0);
+        console.log('Owner IDs extraídos de getOwners:', ownerIds);
+      }
+    } catch (error) {
+      console.error('Error obteniendo propietarios con getOwners:', error);
+      // Fallback: usar los owners que vienen en pet.owners si getOwners falla
+      if (pet.owners && Array.isArray(pet.owners) && pet.owners.length > 0) {
+        ownerIds = pet.owners
+          .map((owner: any) => {
+            // Intentar obtener el ID de diferentes formas:
+            // 1. OwnerInfoDto tiene userId
+            // 2. User tiene user_id
+            if (typeof owner === 'object' && owner !== null) {
+              const ownerId = owner.userId || owner.user_id;
+              if (ownerId) {
+                return parseInt(String(ownerId));
+              }
+            }
+            return 0;
+          })
+          .filter(id => id > 0);
+        console.log('Owner IDs extraídos de pet.owners (fallback):', ownerIds);
+      }
+    }
+    
+    console.log('Clientes disponibles en owners state:', owners.length);
+    console.log('Clientes disponibles:', owners.map(o => ({ id: o.clientId, name: o.name })));
+    console.log('Owner IDs a establecer en formData:', ownerIds);
+    console.log('Comparación: ¿Los ownerIds están en clientes?', ownerIds.map(id => ({
+      id,
+      encontrado: owners.some(o => o.clientId === id),
+      owner: owners.find(o => o.clientId === id)
+    })));
+    
     setFormData({
-      identificacionPropietario: pet.identificacionPropietario,
+      ownerIds: ownerIds,
       nombre: pet.nombre,
       tipo: pet.tipo,
       raza: pet.raza,
       cuidadosEspeciales: pet.cuidadosEspeciales || '',
-      activo: pet.activo || false
+      edad: pet.edad?.toString() || '',
+      sexo: pet.sexo || '',
+      color: pet.color || ''
     });
+    
     setShowForm(true);
-  };
-
-  const handleDelete = async (pet: Pet) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar esta mascota?')) {
-      try {
-        await petAPI.delete({ id: pet.id });
-        await loadPets();
-      } catch (error) {
-        console.error('Error deleting pet:', error);
-      }
-    }
   };
 
   const resetForm = () => {
     setFormData({
-      identificacionPropietario: '',
+      ownerIds: [],
       nombre: '',
       tipo: '',
       raza: '',
       cuidadosEspeciales: '',
-      activo: true
+      edad: '',
+      sexo: '',
+      color: ''
     });
     setEditingPet(null);
     setShowForm(false);
   };
 
-  const getOwnerInfo = (identificacion: string) => {
-    const owner = owners.find(o => o.ident === identificacion);
-    return owner ? { nombre: owner.name, celular: owner.telefono } : { nombre: 'No encontrado', celular: 'N/A' };
-  };
 
   if (isLoading) {
     return (
@@ -171,24 +356,145 @@ const Pets: React.FC = () => {
         {/* Pet Form */}
         {showForm && (
           <form onSubmit={handleSubmit} className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Identificación Propietario
+            <div className="col-span-full">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Propietario(s)
               </label>
-              <select
-                name="identificacionPropietario"
-                value={formData.identificacionPropietario}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                required
-              >
-                <option value="">Seleccionar propietario</option>
-                {owners && Array.isArray(owners) && owners.map((owner: UserType) => (
-                  <option key={owner.user_id} value={owner.ident}>
-                    {owner.ident} - {owner.name}
-                  </option>
-                ))}
-              </select>
+              
+              {/* Propietarios seleccionados */}
+              <div className="mb-3 flex flex-wrap gap-2">
+                {formData.ownerIds.length > 0 ? (
+                  formData.ownerIds.map((ownerId) => {
+                    const owner = owners.find(o => o.clientId === ownerId);
+                    if (!owner) {
+                      // Si no se encuentra en la lista actual, mostrar solo el ID
+                      return (
+                        <div
+                          key={ownerId}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-full text-sm"
+                        >
+                          <User className="h-3 w-3" />
+                          <span>ID: {ownerId} (No encontrado en clientes)</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                ownerIds: prev.ownerIds.filter(id => id !== ownerId)
+                              }));
+                            }}
+                            className="ml-1 hover:text-red-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div
+                        key={ownerId}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm"
+                      >
+                        <User className="h-3 w-3" />
+                        <span>{owner.ident} - {owner.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              ownerIds: prev.ownerIds.filter(id => id !== ownerId)
+                            }));
+                          }}
+                          className="ml-1 hover:text-red-600"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500">No hay propietarios seleccionados</p>
+                )}
+              </div>
+
+              {/* Selector de propietarios disponibles */}
+              <div className="flex gap-2">
+                <select
+                  ref={ownerSelectRef}
+                  name="addOwner"
+                  onChange={(e) => {
+                    const ownerId = parseInt(e.target.value);
+                    if (ownerId > 0 && !formData.ownerIds.includes(ownerId)) {
+                      setFormData(prev => ({
+                        ...prev,
+                        ownerIds: [...prev.ownerIds, ownerId]
+                      }));
+                      // Reset select después de un breve delay para permitir que React procese el cambio
+                      setTimeout(() => {
+                        if (ownerSelectRef.current) {
+                          ownerSelectRef.current.value = '';
+                        }
+                      }, 10);
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  defaultValue=""
+                >
+                  <option value="">Seleccionar cliente para agregar</option>
+                  {owners && Array.isArray(owners) && owners.length > 0 ? (
+                    owners
+                      .filter(owner => {
+                        const ownerId = owner.clientId || 0;
+                        return ownerId > 0 && !formData.ownerIds.includes(ownerId);
+                      })
+                      .map((owner: ClientResponseDto) => (
+                        <option key={owner.clientId} value={owner.clientId}>
+                          {owner.ident} - {owner.name}
+                        </option>
+                      ))
+                  ) : (
+                    <option value="" disabled>No hay clientes disponibles</option>
+                  )}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (ownerSelectRef.current && ownerSelectRef.current.value) {
+                      const ownerId = parseInt(ownerSelectRef.current.value);
+                      if (ownerId > 0 && !formData.ownerIds.includes(ownerId)) {
+                        setFormData(prev => ({
+                          ...prev,
+                          ownerIds: [...prev.ownerIds, ownerId]
+                        }));
+                        ownerSelectRef.current.value = '';
+                        // Forzar actualización del select
+                        setTimeout(() => {
+                          if (ownerSelectRef.current) {
+                            ownerSelectRef.current.value = '';
+                          }
+                        }, 10);
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center space-x-1 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  disabled={
+                    !ownerSelectRef.current || 
+                    !ownerSelectRef.current.value || 
+                    ownerSelectRef.current.value === '' ||
+                    (owners && Array.isArray(owners) && owners.filter(owner => {
+                      const ownerId = owner.clientId || 0;
+                      return ownerId > 0 && !formData.ownerIds.includes(ownerId);
+                    }).length === 0)
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Agregar</span>
+                </button>
+              </div>
+              
+              {formData.ownerIds.length === 0 && (
+                <p className="mt-2 text-xs text-red-500">Se requiere al menos un propietario</p>
+              )}
             </div>
 
             <div>
@@ -242,6 +548,53 @@ const Pets: React.FC = () => {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Edad
+              </label>
+              <input
+                type="number"
+                name="edad"
+                value={formData.edad}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. 2"
+                min="0"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Sexo
+              </label>
+              <select
+                name="sexo"
+                value={formData.sexo}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                required
+              >
+                <option value="">Seleccionar sexo</option>
+                <option value="Macho">Macho</option>
+                <option value="Hembra">Hembra</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Color
+              </label>
+              <input
+                type="text"
+                name="color"
+                value={formData.color}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Ej. Negro, Blanco"
+              />
+            </div>
+
             <div className="col-span-full">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Cuidados especiales
@@ -283,7 +636,15 @@ const Pets: React.FC = () => {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-semibold text-gray-900">Mascotas Registradas</h2>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={async () => {
+                // Asegurar que los roles estén cargados antes de recargar propietarios
+                if (roles.length === 0) {
+                  await loadRoles();
+                }
+                // Recargar propietarios antes de mostrar el formulario
+                await loadOwners();
+                setShowForm(true);
+              }}
               className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center space-x-2"
             >
               <Plus className="h-4 w-4" />
@@ -314,7 +675,7 @@ const Pets: React.FC = () => {
                     Identificación
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Propietario
+                    Cliente
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Celular
@@ -329,6 +690,15 @@ const Pets: React.FC = () => {
                     Raza
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Edad
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Sexo
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Color
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Cuidados especiales
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -337,21 +707,26 @@ const Pets: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPets.map((pet) => {
-                  const ownerInfo = getOwnerInfo(pet.identificacionPropietario);
+                {paginatedData.map((pet) => {
+                  // Los owners pueden venir como OwnerInfoDto (con userId, name, ident, telefono) o User completo
+                  // Mapear para obtener la información correctamente
+                  const ownerIdents = pet.owners?.map((owner: any) => owner.ident || '').filter((i: string) => i).join(',') || '';
+                  const ownerNames = pet.owners?.map((owner: any) => owner.name || '').filter((n: string) => n).join(',') || '';
+                  const ownerPhones = pet.owners?.map((owner: any) => owner.telefono || '').filter((p: string) => p).join(',') || '';
+                  
                   return (
-                    <tr key={pet.id} className="hover:bg-gray-50">
+                    <tr key={pet.petId} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {pet.identificacionPropietario}
+                        {ownerIdents}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <User className="h-4 w-4 text-gray-400 mr-2" />
-                          <div className="text-sm text-gray-900">{ownerInfo.nombre}</div>
+                          <div className="text-sm text-gray-900">{ownerNames}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {ownerInfo.celular}
+                        {ownerPhones}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -368,6 +743,17 @@ const Pets: React.FC = () => {
                         {pet.raza}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {pet.edad || 'N/A'} {pet.edad ? 'años' : ''}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          {pet.sexo || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {pet.color || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {pet.cuidadosEspeciales || 'Ninguno'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
@@ -377,15 +763,6 @@ const Pets: React.FC = () => {
                         >
                           <Edit className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleDelete(pet)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                        <button className="text-gray-600 hover:text-gray-900">
-                          <Printer className="h-4 w-4" />
-                        </button>
                       </td>
                     </tr>
                   );
@@ -394,21 +771,22 @@ const Pets: React.FC = () => {
             </table>
           </div>
 
+          {/* Paginación */}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredPets.length}
+            itemsPerPage={10}
+            onPageChange={goToPage}
+            itemName="mascotas"
+          />
+
           {/* Action Buttons */}
           <div className="mt-6 flex space-x-4">
-            <button className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center space-x-2">
-              <Trash2 className="h-4 w-4" />
-              <span>Eliminar</span>
-            </button>
-            <button className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center space-x-2">
-              <Edit className="h-4 w-4" />
-              <span>Modificar</span>
-            </button>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 flex items-center space-x-2">
-              <Printer className="h-4 w-4" />
-              <span>Imprimir</span>
-            </button>
-            <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center space-x-2">
+            <button 
+              className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 flex items-center space-x-2"
+              onClick={() => window.location.href = '/'}
+            >
               <span>Regresar al Menú Principal</span>
             </button>
           </div>

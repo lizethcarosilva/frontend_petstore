@@ -49,28 +49,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Usar API real
       const response = await userAPI.login(credentials);
       
+      // Verificar que la respuesta sea exitosa y tenga datos
+      if (!response || !response.data) {
+        console.error('No se recibieron datos del backend');
+        return false;
+      }
+      
       // El backend devuelve todos los datos en el mismo nivel
       const loginData = response.data;
+      
+      // Si la respuesta es un string de error, el login falló
+      if (typeof loginData === 'string') {
+        console.error('Error del backend:', loginData);
+        // Lanzar error para que se capture en el catch
+        throw new Error(loginData);
+      }
+      
       const newToken = loginData.token;
-      console.log(loginData);
+      
+      // Verificar que se recibió el token
+      if (!newToken) {
+        console.error('No se recibió token del backend');
+        console.log('Login response:', loginData);
+        throw new Error('No se recibió token del servidor');
+      }
       
       // Construir el objeto user con los datos que vienen en la respuesta
       const userData: User = {
-        user_id: loginData.userId?.toString(),
+        user_id: loginData.userId?.toString() || loginData.user_id?.toString(),
         name: loginData.name,
         ident: loginData.ident || '',
         correo: loginData.correo,
         telefono: loginData.telefono || '',
         direccion: loginData.direccion || '',
-        rol_id: loginData.rolId || loginData.role,
+        rol_id: loginData.rolId || loginData.role || loginData.rol_id,
         activo: loginData.activo !== false,
-        tenantId: loginData.tenantId || '',
+        tenantId: loginData.tenantId || loginData.tenant_id || '',
       };
-
-      if (!newToken) {
-        console.error('No se recibió token del backend');
-        return false;
-      }
 
       setToken(newToken);
       setUser(userData);
@@ -78,9 +93,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(userData));
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      return false;
+      console.error('Error response:', error?.response);
+      console.error('Error data:', error?.response?.data);
+      
+      // Extraer el mensaje de error del backend
+      let errorMessage = 'Error al iniciar sesión';
+      
+      if (error?.response?.data) {
+        // El backend puede devolver el error como string directo
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      // Lanzar el error con el mensaje para que se capture en Login.tsx
+      throw new Error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -111,7 +144,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  console.log(context);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
