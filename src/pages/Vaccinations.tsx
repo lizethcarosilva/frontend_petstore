@@ -967,7 +967,7 @@ const VaccinationsPage: React.FC = () => {
                   const selectedVaccine = vaccineProducts.find(p => p.nombre === formData.vaccineName);
                   return selectedVaccine && (
                     <p className="mt-1 text-xs text-gray-600">
-                      💉 {selectedVaccine.descripcion || 'Vacuna seleccionada'}
+                      <i className="pi pi-heart mr-1"></i> {selectedVaccine.descripcion || 'Vacuna seleccionada'}
                       {selectedVaccine.fabricante && ` - Fabricante: ${selectedVaccine.fabricante}`}
                     </p>
                   );
@@ -1074,7 +1074,7 @@ const VaccinationsPage: React.FC = () => {
                 />
                 {formData.doseNumber && parseInt(formData.doseNumber) > 1 && (
                   <p className="mt-1 text-xs text-blue-600">
-                    ℹ️ Dosis {formData.doseNumber} - La dosis {parseInt(formData.doseNumber) - 1} será marcada automáticamente como completada si existe.
+                    <i className="pi pi-info-circle mr-1"></i> Dosis {formData.doseNumber} - La dosis {parseInt(formData.doseNumber) - 1} será marcada automáticamente como completada si existe.
                   </p>
                 )}
               </div>
@@ -1122,7 +1122,7 @@ const VaccinationsPage: React.FC = () => {
                 </div>
                 {formData.requiresBooster && (
                   <p className="mt-1 text-xs text-purple-600">
-                    💉 Esta vacuna requerirá dosis adicionales en el futuro.
+                    <i className="pi pi-heart mr-1"></i> Esta vacuna requerirá dosis adicionales en el futuro.
                     {formData.doseNumber && parseInt(formData.doseNumber) > 1 && 
                       ` La dosis ${parseInt(formData.doseNumber) - 1} será marcada como completada.`
                     }
@@ -1174,7 +1174,7 @@ const VaccinationsPage: React.FC = () => {
               </button>
               {vaccineProducts.length === 0 && (
                 <span className="text-sm text-red-600 font-medium">
-                  ⚠️ Debe registrar vacunas en Productos primero
+                  <i className="pi pi-exclamation-triangle mr-1"></i> Debe registrar vacunas en Productos primero
                 </span>
               )}
             </div>
@@ -1273,7 +1273,7 @@ const VaccinationsPage: React.FC = () => {
                           </div>
                           {isUpcomingSoon(vaccination.nextDoseDate) && (
                             <div className="text-xs text-yellow-600">
-                              ⚠️ Próximamente
+                              <i className="pi pi-exclamation-triangle mr-1"></i> Próximamente
                             </div>
                           )}
                         </div>

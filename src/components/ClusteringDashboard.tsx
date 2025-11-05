@@ -92,7 +92,7 @@ const ClusteringDashboard: React.FC = () => {
   if (error) {
     return (
       <div style={styles.error}>
-        <h3>⚠️ Error al cargar clustering</h3>
+        <h3><i className="pi pi-exclamation-triangle"></i> Error al cargar clustering</h3>
         <p>{error}</p>
         <button onClick={() => window.location.reload()}>Reintentar</button>
       </div>
@@ -105,7 +105,7 @@ const ClusteringDashboard: React.FC = () => {
     <div style={styles.container}>
       {/* Header */}
       <header style={styles.header}>
-        <h1>🔬 Análisis de Hierarchical Clustering</h1>
+        <h1><i className="pi pi-search"></i> Análisis de Hierarchical Clustering</h1>
         <p style={styles.subtitle}>
           Descubre patrones ocultos en tus datos con Machine Learning
         </p>
@@ -114,14 +114,14 @@ const ClusteringDashboard: React.FC = () => {
       {/* Resumen de calidad */}
       <div style={styles.qualityCards}>
         <QualityCard
-          icon="🐾"
+          icon="pi-star"
           title="Mascotas"
           clusters={data.clustering_mascotas.n_clusters}
           score={data.clustering_mascotas.silhouette_score}
           total={data.clustering_mascotas.total_mascotas}
         />
         <QualityCard
-          icon="👥"
+          icon="pi-users"
           title="Clientes"
           clusters={data.clustering_clientes.n_segmentos}
           score={data.clustering_clientes.silhouette_score}
@@ -129,7 +129,7 @@ const ClusteringDashboard: React.FC = () => {
           quality={data.clustering_clientes.calidad_clustering}
         />
         <QualityCard
-          icon="🏥"
+          icon="pi-building"
           title="Servicios"
           clusters={data.clustering_servicios.n_grupos}
           score={data.clustering_servicios.silhouette_score}
@@ -143,19 +143,19 @@ const ClusteringDashboard: React.FC = () => {
           style={vistaActiva === 'clientes' ? styles.tabActive : styles.tab}
           onClick={() => setVistaActiva('clientes')}
         >
-          👥 Clientes
+          <i className="pi pi-users"></i> Clientes
         </button>
         <button
           style={vistaActiva === 'mascotas' ? styles.tabActive : styles.tab}
           onClick={() => setVistaActiva('mascotas')}
         >
-          🐾 Mascotas
+          <i className="pi pi-star"></i> Mascotas
         </button>
         <button
           style={vistaActiva === 'servicios' ? styles.tabActive : styles.tab}
           onClick={() => setVistaActiva('servicios')}
         >
-          🏥 Servicios
+          <i className="pi pi-building"></i> Servicios
         </button>
       </div>
 
@@ -204,7 +204,7 @@ const QualityCard: React.FC<QualityCardProps> = ({ icon, title, clusters, score,
 
   return (
     <div style={styles.qualityCard}>
-      <div style={styles.qualityIcon}>{icon}</div>
+      <div style={styles.qualityIcon}><i className={`pi ${icon}`}></i></div>
       <h3 style={styles.qualityTitle}>{title}</h3>
       <div style={styles.qualityStats}>
         <div className="stat">
@@ -246,7 +246,7 @@ const SegmentosClientes: React.FC<{ data: ClusteringData['clustering_clientes'] 
   return (
     <div style={styles.section}>
       <h2 style={styles.sectionTitle}>
-        👥 Segmentación de Clientes - {data.calidad_clustering}
+        <i className="pi pi-users"></i> Segmentación de Clientes - {data.calidad_clustering}
       </h2>
       <p style={styles.sectionSubtitle}>
         {data.total_clientes_analizados} clientes analizados | 
@@ -290,7 +290,7 @@ const SegmentosClientes: React.FC<{ data: ClusteringData['clustering_clientes'] 
 
             {/* Estrategia sugerida */}
             <div style={styles.estrategia}>
-              <small>💡 Estrategia:</small>
+              <small><i className="pi pi-lightbulb"></i> Estrategia:</small>
               <p>{getEstrategia(segmento.nombre)}</p>
             </div>
           </div>
@@ -309,7 +309,7 @@ const ClustersMascotas: React.FC<{ data: ClusteringData['clustering_mascotas'] }
   return (
     <div style={styles.section}>
       <h2 style={styles.sectionTitle}>
-        🐾 Clusters de Mascotas
+        <i className="pi pi-star"></i> Clusters de Mascotas
       </h2>
       <p style={styles.sectionSubtitle}>
         {data.total_mascotas} mascotas analizadas | 
@@ -327,7 +327,7 @@ const ClustersMascotas: React.FC<{ data: ClusteringData['clustering_mascotas'] }
 
             <div style={styles.clusterStats}>
               <div style={styles.statItem}>
-                <span className="icon">🎂</span>
+                <span className="icon"><i className="pi pi-calendar"></i></span>
                 <div>
                   <small>Edad promedio</small>
                   <strong>{cluster.edad_promedio.toFixed(1)} años</strong>
@@ -335,7 +335,7 @@ const ClustersMascotas: React.FC<{ data: ClusteringData['clustering_mascotas'] }
               </div>
 
               <div style={styles.statItem}>
-                <span className="icon">💰</span>
+                <span className="icon"><i className="pi pi-dollar"></i></span>
                 <div>
                   <small>Precio promedio</small>
                   <strong>${cluster.precio_promedio.toFixed(2)}</strong>
@@ -343,7 +343,7 @@ const ClustersMascotas: React.FC<{ data: ClusteringData['clustering_mascotas'] }
               </div>
 
               <div style={styles.statItem}>
-                <span className="icon">🏆</span>
+                <span className="icon"><i className="pi pi-star"></i></span>
                 <div>
                   <small>Tipo predominante</small>
                   <strong>{cluster.tipo_mascota_predominante}</strong>
@@ -379,7 +379,7 @@ const GruposServicios: React.FC<{ data: ClusteringData['clustering_servicios'] }
   return (
     <div style={styles.section}>
       <h2 style={styles.sectionTitle}>
-        🏥 Agrupación de Servicios
+        <i className="pi pi-building"></i> Agrupación de Servicios
       </h2>
       <p style={styles.sectionSubtitle}>
         {data.total_servicios} servicios analizados | 

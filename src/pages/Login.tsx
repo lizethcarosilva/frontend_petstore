@@ -55,9 +55,10 @@ const Login: React.FC = () => {
           {/* Logo and title */}
           <div className="text-center">
             <div className="flex justify-center mb-6">
-              <Heart className="h-16 w-16 text-green-600" />
+              <img src='./arcticons_pet.png' alt="logo" className="w-[100px] h-[100px]" />
+              <h2 className="flex text-3xl font-bold text-gray-900 justify-center items-center">Log in</h2>
             </div>
-            <h2 className="text-3xl font-bold text-gray-900">Log in</h2>
+            
             <p className="mt-2 text-sm text-gray-600">
               Si no tienes una cuenta registrada{' '}
               <button className="font-medium text-green-600 hover:text-green-500">
@@ -173,12 +174,9 @@ const Login: React.FC = () => {
         <div className="max-w-lg text-center">
           <div className="bg-white rounded-full p-8 mb-8">
             <div className="flex justify-center items-center space-x-4">
-              <div className="text-6xl">🐕</div>
-              <div className="text-6xl">🐱</div>
+                <img src='./amico.png' alt="logo" className="w-[480px] h-[480px]" />
             </div>
-            <div className="mt-4 text-2xl font-bold text-gray-800">
-              ADoPt Me :)
-            </div>
+
           </div>
           <h3 className="text-4xl font-bold text-white mb-4">
             Un cuidado adecuado para tu mascota

@@ -1309,7 +1309,7 @@ const MedicalHistoryPage: React.FC = () => {
                       const selectedVaccine = vaccineProducts.find((p: any) => p.nombre === vaccinationFormData.vaccineName);
                       return selectedVaccine && (
                         <p className="mt-1 text-xs text-gray-600">
-                          💉 {selectedVaccine.descripcion || 'Vacuna seleccionada'}
+                          <i className="pi pi-heart mr-1"></i> {selectedVaccine.descripcion || 'Vacuna seleccionada'}
                           {selectedVaccine.fabricante && ` - Fabricante: ${selectedVaccine.fabricante}`}
                         </p>
                       );
@@ -1411,7 +1411,7 @@ const MedicalHistoryPage: React.FC = () => {
                     />
                     {vaccinationFormData.doseNumber && parseInt(vaccinationFormData.doseNumber) > 1 && (
                       <p className="mt-1 text-xs text-blue-600">
-                        ℹ️ Dosis de refuerzo - Se completará automáticamente la dosis anterior si existe.
+                        <i className="pi pi-info-circle mr-1"></i> Dosis de refuerzo - Se completará automáticamente la dosis anterior si existe.
                       </p>
                     )}
                   </div>
@@ -1458,7 +1458,7 @@ const MedicalHistoryPage: React.FC = () => {
                     </div>
                     {vaccinationFormData.requiresBooster && vaccinationFormData.doseNumber && parseInt(vaccinationFormData.doseNumber) > 1 && (
                       <p className="mt-1 text-xs text-purple-600">
-                        💉 Al registrar esta dosis de refuerzo, la dosis {parseInt(vaccinationFormData.doseNumber) - 1} será marcada automáticamente como completada.
+                        <i className="pi pi-heart mr-1"></i> Al registrar esta dosis de refuerzo, la dosis {parseInt(vaccinationFormData.doseNumber) - 1} será marcada automáticamente como completada.
                       </p>
                     )}
                   </div>
@@ -1501,7 +1501,7 @@ const MedicalHistoryPage: React.FC = () => {
                   </button>
                   {vaccineProducts.length === 0 && (
                     <span className="text-sm text-red-600 font-medium">
-                      ⚠️ Debe registrar vacunas en Productos primero
+                      <i className="pi pi-exclamation-triangle mr-1"></i> Debe registrar vacunas en Productos primero
                     </span>
                   )}
                 </div>

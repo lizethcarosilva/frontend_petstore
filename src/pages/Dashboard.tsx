@@ -60,6 +60,7 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       setStats(null);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -127,7 +128,7 @@ const Dashboard: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
                 Análisis con Inteligencia Artificial
                 <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                  ⚠️ No disponible
+                  <i className="pi pi-exclamation-triangle mr-1"></i> No disponible
                 </span>
               </h3>
 
@@ -147,7 +148,7 @@ const Dashboard: React.FC = () => {
             <p className="text-sm text-gray-600 mt-1">
               Insights generados por Machine Learning basados en tus datos
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                🟢 Conectado a IA
+                <i className="pi pi-check-circle mr-1"></i> Conectado a IA
               </span>
             </p>
           </div>
@@ -204,9 +205,8 @@ const Dashboard: React.FC = () => {
             Tipo de Mascota Más Común (IA)
           </h3>
           <div className="text-center py-6 bg-gradient-to-br from-green-50 to-blue-50 rounded-lg mb-4">
-            <div className="text-7xl mb-3">
-              {tiposMascota.tipo_mas_comun === 'Perro' ? '🐕' : 
-               tiposMascota.tipo_mas_comun === 'Gato' ? '🐱' : '🐾'}
+            <div className="mb-3">
+              <i className={`pi ${tiposMascota.tipo_mas_comun === 'Perro' ? 'pi-heart' : tiposMascota.tipo_mas_comun === 'Gato' ? 'pi-heart' : 'pi-star'} text-green-600`} style={{ fontSize: '4rem' }}></i>
             </div>
             <p className="text-3xl font-bold text-green-600">{tiposMascota.tipo_mas_comun}</p>
             <p className="text-sm text-gray-600 mt-2">

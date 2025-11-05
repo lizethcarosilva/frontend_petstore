@@ -171,7 +171,7 @@ const Appointments: React.FC = () => {
   const loadClients = async () => {
     try {
       const response = await clientAPI.getAll();
-      console.log('✅ Clientes cargados:', response.data);
+      console.log('Clientes cargados:', response.data);
       setClients(response.data);
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -349,8 +349,8 @@ const Appointments: React.FC = () => {
           observaciones: formData.observaciones || null
         };
         
-        console.log('✅ Creating appointment with data:', createData);
-        console.log('✅ Cliente seleccionado:', clients.find(c => c.clientId === parseInt(formData.clientId)));
+        console.log('Creating appointment with data:', createData);
+        console.log('Cliente seleccionado:', clients.find(c => c.clientId === parseInt(formData.clientId)));
         
         await appointmentAPI.create(createData);
       }

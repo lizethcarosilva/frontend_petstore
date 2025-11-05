@@ -39,7 +39,7 @@ const Chatbot: React.FC<ChatbotProps> = ({ usuarioId = 'user123' }) => {
     setMensajes([
       {
         id: '0',
-        texto: '¡Hola! 👋 Soy tu asistente con IA.\n\nPuedo ayudarte con:\n• 📊 Estadísticas\n• 🔍 Buscar mascotas\n• 📈 Análisis y predicciones\n\n¿Qué necesitas?',
+        texto: '¡Hola! Soy tu asistente con IA.\n\nPuedo ayudarte con:\n• Estadísticas\n• Buscar mascotas\n• Análisis y predicciones\n\n¿Qué necesitas?',
         esUsuario: false,
         timestamp: new Date(),
       },
@@ -48,13 +48,13 @@ const Chatbot: React.FC<ChatbotProps> = ({ usuarioId = 'user123' }) => {
 
   const checkConnection = async () => {
     try {
-      console.log('🔍 Verificando conexión con API de IA...');
+      console.log('Verificando conexión con API de IA...');
       const response = await chatbotAPI.healthCheck();
-      console.log('✅ Conexión exitosa con API de IA:', response.data);
+      console.log('Conexión exitosa con API de IA:', response.data);
       setIsConnected(true);
       setError(null);
     } catch (err: any) {
-      console.error('❌ Error conectando con la API de IA:', err);
+      console.error('Error conectando con la API de IA:', err);
       setIsConnected(false);
       
       // Mensaje de error más específico
@@ -108,8 +108,8 @@ const Chatbot: React.FC<ChatbotProps> = ({ usuarioId = 'user123' }) => {
       const mensajeError: Message = {
         id: (Date.now() + 1).toString(),
         texto: err.response?.status === 500 
-          ? '❌ Hubo un error procesando tu mensaje. Por favor, intenta de nuevo.'
-          : '❌ No se pudo conectar con el servidor de IA. Verifica que la API esté corriendo en http://localhost:8000',
+          ? 'Hubo un error procesando tu mensaje. Por favor, intenta de nuevo.'
+          : 'No se pudo conectar con el servidor de IA. Verifica que la API esté corriendo en http://localhost:8000',
         esUsuario: false,
         timestamp: new Date(),
       };

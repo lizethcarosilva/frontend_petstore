@@ -93,7 +93,7 @@ const Pets: React.FC = () => {
       
       // Cargar CLIENTES desde el nuevo endpoint /api/clients
       const clientsResponse = await clientAPI.getAll();
-      console.log('✅ Clientes cargados:', clientsResponse.data?.length || 0);
+      console.log('Clientes cargados:', clientsResponse.data?.length || 0);
       
       if (Array.isArray(clientsResponse.data)) {
         // Filtrar solo clientes activos
@@ -101,7 +101,7 @@ const Pets: React.FC = () => {
           client.activo !== false
         );
         
-        console.log(`✅ Clientes activos: ${activeClients.length}`);
+        console.log(`Clientes activos: ${activeClients.length}`);
         setOwners(activeClients);
       } else {
         console.warn('clientsResponse.data no es un array:', clientsResponse.data);

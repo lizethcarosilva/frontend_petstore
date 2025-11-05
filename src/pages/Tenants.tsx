@@ -45,10 +45,10 @@ const Tenants: React.FC = () => {
     try {
       setIsLoading(true);
       const response = await tenantAPI.getAll();
-      console.log('✅ Tenants cargados:', response.data);
+      console.log('Tenants cargados:', response.data);
       setTenants(response.data);
     } catch (error: any) {
-      console.error('❌ Error loading tenants:', error);
+      console.error('Error loading tenants:', error);
       alert('Error al cargar las empresas: ' + (error.response?.data?.message || error.message));
     } finally {
       setIsLoading(false);

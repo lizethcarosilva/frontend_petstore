@@ -151,7 +151,7 @@ const Invoices: React.FC = () => {
     } catch (error: any) {
       // Si es error 403, solo establecer array vacío sin mostrar error
       if (error.response?.status === 403) {
-        console.warn('⚠️ Sin permisos para ver facturas. Debes actualizar InvoiceController en el backend.');
+        console.warn('Sin permisos para ver facturas. Debes actualizar InvoiceController en el backend.');
         setInvoices([]);
       } else {
         console.error('Error loading invoices:', error);
@@ -204,8 +204,8 @@ const Invoices: React.FC = () => {
     try {
       // Cargar CLIENTES desde el nuevo endpoint /api/clients
       const clientsResponse = await clientAPI.getAll();
-      console.log('✅ Clientes cargados desde API:', clientsResponse.data);
-      console.log('✅ Total clientes:', clientsResponse.data.length);
+      console.log('Clientes cargados desde API:', clientsResponse.data);
+      console.log('Total clientes:', clientsResponse.data.length);
       setClients(clientsResponse.data);
       
       // Cargar EMPLEADOS desde /api/users filtrando por rol
@@ -218,12 +218,12 @@ const Invoices: React.FC = () => {
         return rolId === '2' || rolId === '3';
       });
       
-      console.log('✅ Empleados filtrados:', employeesList);
-      console.log('✅ Total empleados encontrados:', employeesList.length);
+      console.log('Empleados filtrados:', employeesList);
+      console.log('Total empleados encontrados:', employeesList.length);
       setEmployees(employeesList);
       
     } catch (error) {
-      console.error('❌ Error loading users/clients:', error);
+      console.error('Error loading users/clients:', error);
     }
   };
 
@@ -504,34 +504,34 @@ const Invoices: React.FC = () => {
       
       const response = await invoiceAPI.create(invoiceData);
       
-      console.log('✅ Factura creada exitosamente:', response.data);
+      console.log('Factura creada exitosamente:', response.data);
       
       // Marcar citas como facturadas
       if (invoicedAppointments.length > 0) {
-        console.log('📋 Marcando citas como facturadas:', invoicedAppointments);
+        console.log('Marcando citas como facturadas:', invoicedAppointments);
         for (const aptId of invoicedAppointments) {
           try {
             await appointmentAPI.markAsInvoiced(aptId);
-            console.log(`✅ Cita ${aptId} marcada como facturada`);
+            console.log(`Cita ${aptId} marcada como facturada`);
           } catch (error) {
-            console.error(`❌ Error marcando cita ${aptId} como facturada:`, error);
+            console.error(`Error marcando cita ${aptId} como facturada:`, error);
           }
         }
       }
       
       // Marcar vacunaciones como facturadas
       if (invoicedVaccinations.length > 0) {
-        console.log('💉 Marcando vacunaciones como facturadas:', invoicedVaccinations);
+        console.log('Marcando vacunaciones como facturadas:', invoicedVaccinations);
         for (const vacId of invoicedVaccinations) {
           try {
-            console.log(`🔵 Llamando a vaccinationAPI.markAsInvoiced(${vacId})`);
+            console.log(`Llamando a vaccinationAPI.markAsInvoiced(${vacId})`);
             const response = await vaccinationAPI.markAsInvoiced(vacId);
-            console.log(`✅ Vacunación ${vacId} marcada como facturada. Respuesta:`, response.data);
+            console.log(`Vacunación ${vacId} marcada como facturada. Respuesta:`, response.data);
           } catch (error: any) {
-            console.error(`❌ Error marcando vacunación ${vacId} como facturada:`, error);
-            console.error(`❌ Error completo:`, error.response?.data);
-            console.error(`❌ Status:`, error.response?.status);
-            console.error(`❌ URL:`, error.config?.url);
+            console.error(`Error marcando vacunación ${vacId} como facturada:`, error);
+            console.error(`Error completo:`, error.response?.data);
+            console.error(`Status:`, error.response?.status);
+            console.error(`URL:`, error.config?.url);
           }
         }
       }
